@@ -30,6 +30,9 @@ Thumbs.db
 # Vite
 .vite/
 
+# Secrets
+server/secrets/
+
 # Runtime
 *.pid
 *.seed
