@@ -27,7 +27,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     async login(email, password) {
       const { user: loggedInUser } = await api.login(email, password);
-      setUser(loggedInUser);
+      const session = await api.me();
+      if (!session.user) {
+        throw new Error('Login succeeded but the session cookie was not saved. If you use HTTP, set AUTH_COOKIE_SECURE=false on the server.');
+      }
+      setUser(session.user ?? loggedInUser);
     },
     async logout() {
       await api.logout();
