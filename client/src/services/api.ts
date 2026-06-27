@@ -3,7 +3,7 @@ import type { CommandCenterFilters, CommandCenterResponse, ComparisonResponse, S
 import type { HrExpenseListResponse, HrExpensePayload, HrExpenseRecord } from '../types/productivity';
 import type { PbtCalculatedRecord, PbtCalculatedResponse, PbtHistoricalResponse, PbtHrExpenseResponse, PbtInputPayload, PbtRevenueResponse } from '../types/pbt';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
