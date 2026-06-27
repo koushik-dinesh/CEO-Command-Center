@@ -1,0 +1,167 @@
+NC DASHBOARD
+
+,,,,,,,,,,,,,,,,,,,QA SAVED AMOUNT
+
+,,,,,,,,,,,,,,,,,,,211008.8452771799
+
+
+
+
+
+,,,,,,,,,,,,,,,,,,,COPQ BEFORE QA CLEARANCE
+
+,,,,,,,,,,,,,,,,,,,583944.0492
+
+
+
+
+
+
+
+
+
+
+
+
+RM Stores,,COPQ,,,Supplier,,COPQ,,,Dispatch,,COPQ
+
+📦 ,,82936.98280000001,,,,,36549.65232119999,,,🚚,,0
+
+
+,,,,,,,,,,,,,,TOTAL COPQ
+
+Customer Return,,COPQ,,,Design,,COPQ,,,Process,,COPQ
+,,,,,,,,,,,,,,321762.5899562397
+🔄,,2338.6200000000003,,,🖥️📐,,20439.4539626,,,📝⚙️,,63758.18585664
+
+
+
+
+Moulding Chennai,,COPQ,,,Assembly Chennai,,COPQ,,,Production O2,,COPQ
+
+🔩,,36973.59458777,,,🏭,,31304.870825060007,,,🏭🔬,,12445.801902600002
+
+
+
+
+Molding Trichy,,COPQ,,,Assembly Trichy,,COPQ,,,Sales,,COPQ
+
+🔩,,18352.972675500005,,,🏭,,11441.084022759998,,,💰,,95
+
+
+
+
+NOTE: DATAS HERE ARE FROM THE MONTH OF NOV 2025 - TILL DATE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+,QC Location,SUM of FINAL COPQ,,QC,COUNTA of NC Quantity,,QC,SUM of FINAL COPQ
+,,5126.371002110004,,,0,,,0
+,FQC Chennai,40593.819382650014,,,0,,,5126.371002110004
+,FQC Trichy,1921.4536,,FQC,555,,FQC,42515.272982650014
+,IPQC Assembly Chennai,46689.80475235001,,IPQC,1437,,IPQC,218552.99291947985
+,IPQC Assembly Trichy,20121.826622760003,,IQC,138,,IQC,61885.203052000004
+,IPQC Moulding Chennai,27689.529931169993,,Grand Total,2130,,Grand Total,328079.83995623986
+,IPQC Moulding Trichy,12831.657370000003
+,IPQC OS,111220.17424319997
+,IQC Chennai,61643.07220000001
+,IQC Trichy,242.130852
+,Grand Total,328079.83995623986
+
+
+
+,Product name,COUNT of NC Quantity,,,,,,,Columns
+,,0,,,,,,Rows,Values
+,Breathing Circuit,59
+,ECG Accessories,58
+,ECG Cables,497
+,EEG Cables,5
+,ESU Accessories,9
+,ESU Pencil,50
+,Flow Sensor,27
+,IBP Cables,50
+,Input cable,42
+,Interface Cables,12
+,Mono & Bipolar,11
+,NIBP cuff,33
+,Oxygen Sensor,207
+,Raw cables,1,,,,,Product name,COUNTA of NC Quantity
+,Raw components,9,,,,,,0
+,SFC,116,,,,,Breathing Circuit,59
+,Simulator,31,,,,,ECG Accessories,58
+,SPO2 Extension Cable,72,,,,,ECG Cables,499
+,SPO2 probe,281,,,,,EEG Cables,5
+,Temp probe,72,,,,,ESU Accessories,9
+,VAP,13,,,,,ESU Pencil,50
+,Grand Total,1655,,,,,Flow Sensor,27
+,,,,,,,IBP Cables,50
+,,,,,,,Input cable,42
+,,,,,,,Interface Cables,12
+,,,,,,,Mono & Bipolar,11
+,Issue Related to,COUNTA of Issue Related to,,,,,NIBP cuff,33
+,,0,,,,,Oxygen Sensor,207
+,Customer Return,7,,,,,Raw cables,1
+,Design,10,,,,,Raw components,9
+,Dispatch,4,,,,,SFC,116
+,Maintenance,4,,,,,Simulator,31
+,Process,99,,,,,SPO2 Extension Cable,72
+,Production assembly-Trichy,107,,,,,SPO2 probe,281
+,Production O2,40,,,,,Temp probe,72
+,Production-assembly-Chennai,436,,,,,VAP,13
+,Production-moulding Trichy,199,,,,,Grand Total,1657
+,Production-moulding-Chennai,514
+,Sales,1
+,Stores,25
+,Supplier,211
+,Grand Total,1657
+
+,,,,Issue Related to,FINAL COPQ
+,,,,,5126.371002110004
+,,,,Customer Return,2338.6200000000003,,0
+,,,,Design,20439.4539626
+,,,,Process,63758.18585664
+,,,,Production assembly-Trichy,11441.084022759998
+,,,,Production O2,12445.801902600002
+,,,,Production-assembly-Chennai,31304.870825060007
+,,,,Production-moulding Trichy,18352.972675500005
+,,,,Production-moulding-Chennai,36973.59458777,,#N/A (Argument must be a range.)
+,,,,Sales,95
+,,,,Stores,82936.98280000001
+,,,,Supplier,36549.65232119999
+,,,,Grand Total,321762.5899562397
+
+
+
+
+,,,,,,,0
+
+
+,SUM of Issue Related to
+,0,,,,DEPARTMENT,FORMULA
+,,,,,Stores,82936.98280000001
+,,,,,Supplier,36549.65232119999
+,,,,,Dispatch,0
+,,,,,Customer Return,2338.6200000000003
+,,,,,Design,20439.4539626
+,,,,,Process,63758.18585664
+,,,,,Production-assembly-Chennai,31304.870825060007
+,Columns,,,,Production assembly-Trichy,11441.084022759998
+Rows,Values,,,,Production O2,12445.801902600002
+,,,,,Production-moulding-Chennai,36973.59458777
+,,,,,Production-moulding Trichy,18352.972675500005
+,,,,,Sales,95
+
+,,,,,TOTAL,321762.5899562397

@@ -1,0 +1,5 @@
+metric,cell,effectiveValue,formattedValue,formula
+qaSavedAmount,T5,241631.26975602028,241631.2698,='Form Responses 1'!BC1-'Form Responses 1'!AT1
+qaSavedAmountLabel,T3,QA SAVED AMOUNT,QA SAVED AMOUNT,
+copqBeforeQaClearance,T13,620461.4592000004,620461.4592,='Form Responses 1'!BC1
+copqBeforeQaClearanceLabel,T11,COPQ BEFORE QA CLEARANCE,COPQ BEFORE QA CLEARANCE,

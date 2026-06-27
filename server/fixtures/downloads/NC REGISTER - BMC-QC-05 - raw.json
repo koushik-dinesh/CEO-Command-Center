@@ -1,0 +1,48 @@
+{
+  "type": "copqDashboard",
+  "cells": {
+    "qaSavedAmount": {
+      "ref": "T5",
+      "formula": "='Form Responses 1'!BC1-'Form Responses 1'!AT1",
+      "valueType": "formula",
+      "effectiveValue": 241631.26975602028,
+      "formattedValue": "241631.2698",
+      "userEnteredValue": "='Form Responses 1'!BC1-'Form Responses 1'!AT1"
+    },
+    "qaSavedAmountLabel": {
+      "ref": "T3",
+      "formula": null,
+      "valueType": "static",
+      "effectiveValue": "QA SAVED AMOUNT",
+      "formattedValue": "QA SAVED AMOUNT",
+      "userEnteredValue": "QA SAVED AMOUNT"
+    },
+    "copqBeforeQaClearance": {
+      "ref": "T13",
+      "formula": "='Form Responses 1'!BC1",
+      "valueType": "formula",
+      "effectiveValue": 620461.4592000004,
+      "formattedValue": "620461.4592",
+      "userEnteredValue": "='Form Responses 1'!BC1"
+    },
+    "copqBeforeQaClearanceLabel": {
+      "ref": "T11",
+      "formula": null,
+      "valueType": "static",
+      "effectiveValue": "COPQ BEFORE QA CLEARANCE",
+      "formattedValue": "COPQ BEFORE QA CLEARANCE",
+      "userEnteredValue": "COPQ BEFORE QA CLEARANCE"
+    }
+  },
+  "range": "Dashboard!T3:T13",
+  "sheetName": "Dashboard",
+  "webViewLink": "https://docs.google.com/spreadsheets/d/1V28mVxJtrqlzvaUTZAogAiI1PjKF4SjdJIGZotaC5vk/edit?usp=drivesdk",
+  "workbookName": "NC REGISTER - BMC/QC/05",
+  "extractionLog": [
+    "Workbook loaded: NC REGISTER - BMC/QC/05",
+    "Dashboard sheet found: Dashboard",
+    "Cell value extracted: Dashboard!T13=620461.4592000004"
+  ],
+  "spreadsheetId": "1V28mVxJtrqlzvaUTZAogAiI1PjKF4SjdJIGZotaC5vk",
+  "workbookModifiedTime": "2026-06-18T12:32:01.665Z"
+}

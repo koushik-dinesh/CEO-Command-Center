@@ -1,0 +1,14 @@
+{
+  "copqCost": "620461.4592000004",
+  "copqValue": "620461.4592000004",
+  "sourceCell": "T13",
+  "qaSavedAmount": "241631.26975602028",
+  "sourceSheetName": "Dashboard",
+  "qaSavedAmountCell": "T5",
+  "sourceCellFormula": "='Form Responses 1'!BC1",
+  "sourceWorkbookName": "NC REGISTER - BMC/QC/05",
+  "sourceCellValueType": "formula",
+  "sourceLastUpdatedAt": "2026-06-18T12:32:01.665Z",
+  "qaSavedAmountFormula": "='Form Responses 1'!BC1-'Form Responses 1'!AT1",
+  "sourceWorkbookModifiedTime": "2026-06-18T12:32:01.665Z"
+}

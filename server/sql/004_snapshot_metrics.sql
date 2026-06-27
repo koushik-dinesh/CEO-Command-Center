@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS snapshot_metrics (
+  snapshotKey VARCHAR(32) NOT NULL PRIMARY KEY,
+  snapshotDate DATE NOT NULL,
+  snapshotTimestamp DATETIME(3) NOT NULL,
+  revenue DECIMAL(20, 4) NULL,
+  grossProfit DECIMAL(20, 4) NULL,
+  grossMargin DECIMAL(10, 4) NULL,
+  ytdCogs DECIMAL(20, 4) NULL,
+  daysElapsed SMALLINT UNSIGNED NULL,
+  inventoryDays DECIMAL(12, 4) NULL,
+  itr DECIMAL(12, 4) NULL,
+  inventoryValue DECIMAL(20, 4) NULL,
+  deadStock DECIMAL(20, 4) NULL,
+  slowMovingStock DECIMAL(20, 4) NULL,
+  reportCount TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  completeness DECIMAL(5, 4) NOT NULL DEFAULT 0,
+  fileNames JSON NULL,
+  computedAt DATETIME(3) NOT NULL,
+  createdAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updatedAt DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  KEY snapshot_metrics_snapshotDate_idx (snapshotDate),
+  KEY snapshot_metrics_snapshotTimestamp_idx (snapshotTimestamp)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
