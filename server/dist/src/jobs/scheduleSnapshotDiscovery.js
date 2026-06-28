@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { env } from '../config/env.js';
 import { SnapshotDiscoveryService } from '../snapshots/SnapshotDiscoveryService.js';
+import { logger } from '../utils/logger.js';
 import { DISCOVERY_CRON_EXPRESSIONS, isDiscoveryWindowExhausted, MAINTENANCE_CRON_EXPRESSION } from '../snapshots/snapshotSchedule.js';
 let discoveryRunning = false;
 let maintenanceRunning = false;
@@ -11,19 +12,22 @@ async function runDiscoveryTick() {
     const service = new SnapshotDiscoveryService();
     try {
         if (await service.shouldSkipDiscoveryWindow()) {
-            console.info('[snapshot-scheduler] Today\'s snapshot already available — discovery window complete');
+            logger.info('snapshot discovery skipped — today already available', { operation: 'snapshot.discovery' });
             return;
         }
         const result = await service.run('DISCOVERY');
         if (result.todaySnapshotFound) {
-            console.info('[snapshot-scheduler] Daily snapshot discovered — switching to maintenance mode until tomorrow');
+            logger.info('daily snapshot discovered', { operation: 'snapshot.discovery' });
         }
         else if (isDiscoveryWindowExhausted()) {
-            console.warn('[snapshot-scheduler] Discovery window ended without today\'s snapshot — will retry during maintenance');
+            logger.warn('discovery window ended without today snapshot', { operation: 'snapshot.discovery' });
         }
     }
     catch (error) {
-        console.error('[snapshot-scheduler] Discovery tick failed', error);
+        logger.error('discovery tick failed', {
+            operation: 'snapshot.discovery',
+            stack: error instanceof Error ? error.stack : undefined,
+        });
     }
     finally {
         discoveryRunning = false;
@@ -37,7 +41,10 @@ async function runMaintenanceTick() {
         await new SnapshotDiscoveryService().run('MAINTENANCE');
     }
     catch (error) {
-        console.error('[snapshot-scheduler] Maintenance sync failed', error);
+        logger.error('maintenance sync failed', {
+            operation: 'snapshot.maintenance',
+            stack: error instanceof Error ? error.stack : undefined,
+        });
     }
     finally {
         maintenanceRunning = false;
@@ -56,5 +63,11 @@ export function scheduleSnapshotDiscovery() {
     cron.schedule(MAINTENANCE_CRON_EXPRESSION, () => {
         void runMaintenanceTick();
     }, cronOptions);
-    console.info(`[snapshot-scheduler] Discovery window ${env.SNAPSHOT_DISCOVERY_START}-${env.SNAPSHOT_DISCOVERY_END} IST (every ${env.SNAPSHOT_DISCOVERY_INTERVAL_MINUTES} min); maintenance: ${env.SNAPSHOT_MAINTENANCE_CRON}`);
+    logger.info('snapshot scheduler started', {
+        operation: 'snapshot.scheduler',
+        discoveryWindow: `${env.SNAPSHOT_DISCOVERY_START}-${env.SNAPSHOT_DISCOVERY_END}`,
+        discoveryIntervalMinutes: env.SNAPSHOT_DISCOVERY_INTERVAL_MINUTES,
+        maintenanceCron: env.SNAPSHOT_MAINTENANCE_CRON,
+        timezone,
+    });
 }

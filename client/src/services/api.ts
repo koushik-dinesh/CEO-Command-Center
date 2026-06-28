@@ -3,15 +3,20 @@ import type { CommandCenterFilters, CommandCenterResponse, ComparisonResponse, S
 import type { HrExpenseListResponse, HrExpensePayload, HrExpenseRecord } from '../types/productivity';
 import type { PbtCalculatedRecord, PbtCalculatedResponse, PbtHistoricalResponse, PbtHrExpenseResponse, PbtInputPayload, PbtRevenueResponse } from '../types/pbt';
 import { getAuthToken, setAuthToken } from './authToken.js';
+import { resolveApiUrl } from './apiUrl.js';
+import { clearServerSession } from './authSession.js';
 
 export { setAuthToken };
 
-/** Empty default: same-origin `/api/*` (reverse proxy in prod; Vite proxy in dev). Set full URL only when API is on another host. */
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getAuthToken();
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const response = await fetch(resolveApiUrl(path), {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
@@ -23,6 +28,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (response.status === 401) {
     setAuthToken(null);
+    void clearServerSession();
+    onUnauthorized?.();
   }
 
   if (!response.ok) {

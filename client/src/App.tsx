@@ -24,12 +24,18 @@ function ProtectedLayout() {
   return user ? <ExecutiveLayout /> : <Navigate to="/login" replace />;
 }
 
-export default function App() {
-  const { user } = useAuth();
+function LoginRoute() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) {
+    return <div className="terminal-page flex min-h-screen items-center justify-center text-secondary-theme">Loading command center...</div>;
+  }
+  return user ? <Navigate to="/" replace /> : <LoginPage />;
+}
 
+export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route element={<ProtectedLayout />}>
         <Route path="/" element={<CommandCenterPage />} />
         <Route path="/intelligence/revenue" element={<RevenueIntelligencePage />} />

@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api, setAuthToken } from '../services/api';
+import { api, setAuthToken, setUnauthorizedHandler } from '../services/api';
+import { getAuthToken } from '../services/authToken';
+import { clearServerSession } from '../services/authSession';
 import type { AuthUser } from '../types';
 
 interface AuthContextValue {
@@ -16,9 +18,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => {
+      void clearServerSession();
+      setAuthToken(null);
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
+  useEffect(() => {
     api.me()
-      .then(({ user: currentUser }) => setUser(currentUser))
-      .catch(() => setUser(null))
+      .then(({ user: currentUser }) => {
+        if (!currentUser && getAuthToken()) {
+          setAuthToken(null);
+        }
+        setUser(currentUser);
+      })
+      .catch(() => {
+        setAuthToken(null);
+        setUser(null);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -27,19 +46,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     async login(email, password) {
       const { user: loggedInUser, token } = await api.login(email, password);
-      setAuthToken(token);
-      const session = await api.me();
-      if (!session.user) {
-        throw new Error('Login succeeded but the session was not saved. Check server AUTH_COOKIE_SECURE=false for HTTP.');
+      if (!token) {
+        throw new Error('Server did not return a session token. Redeploy the latest API and client builds.');
       }
-      setUser(session.user ?? loggedInUser);
+      setAuthToken(token);
+      setUser(loggedInUser);
     },
     async logout() {
       await api.logout();
       setAuthToken(null);
       setUser(null);
     },
-  }), [isLoading, user]);
+  }), [user, isLoading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

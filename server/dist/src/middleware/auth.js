@@ -1,18 +1,16 @@
-import { env } from '../config/env.js';
-import { AuthService } from '../services/AuthService.js';
-export async function requireAuth(req, res, next) {
-    const cookieToken = req.cookies?.[env.AUTH_COOKIE_NAME];
-    const bearerToken = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : undefined;
-    const token = cookieToken ?? bearerToken;
-    if (!token) {
-        res.status(401).json({ message: 'Authentication required' });
-        return;
-    }
-    const user = await AuthService.verifyToken(token);
+import { resolveRequestAuth } from '../auth/requestAuth.js';
+import { logger } from '../utils/logger.js';
+import { unauthorized } from '../utils/HttpError.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
+export const requireAuth = asyncHandler(async (req, res, next) => {
+    const { user } = await resolveRequestAuth(req);
     if (!user) {
-        res.status(401).json({ message: 'Invalid or expired session' });
-        return;
+        logger.warn('authentication failed', {
+            operation: 'requireAuth',
+            path: req.originalUrl,
+        });
+        throw unauthorized();
     }
     req.user = user;
     next();
-}
+});

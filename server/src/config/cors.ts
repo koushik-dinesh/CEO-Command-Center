@@ -27,6 +27,8 @@ const clientOrigin = parseOrigin(env.CLIENT_ORIGIN);
 
 export const corsOptions: cors.CorsOptions = {
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   origin(origin, callback) {
     // Same-origin navigation and server-to-server requests
     if (!origin) {
@@ -52,6 +54,6 @@ export const corsOptions: cors.CorsOptions = {
       }
     }
 
-    callback(new Error(`CORS blocked for origin: ${origin}`));
+    callback(null, false);
   },
 };

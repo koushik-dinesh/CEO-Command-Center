@@ -15,31 +15,119 @@ for (const envPath of envPaths) {
         config({ path: envPath, override: false, quiet: true });
     }
 }
-const envSchema = z.object({
+const boolFromEnv = z
+    .union([z.literal('true'), z.literal('false')])
+    .optional()
+    .transform((value) => (value === undefined ? undefined : value === 'true'));
+const envSchema = z
+    .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-    PORT: z.coerce.number().default(4000),
+    PORT: z.coerce.number().int().positive().default(4000),
     CLIENT_ORIGIN: z.string().url().default('http://localhost:5173'),
-    DB_HOST: z.string().default('127.0.0.1'),
-    DB_PORT: z.coerce.number().default(3306),
-    DB_USER: z.string().default('ceo_user'),
-    DB_PASSWORD: z.string().default('ceo_password'),
-    DB_NAME: z.string().default('ceo_command_center'),
-    DB_CONNECTION_LIMIT: z.coerce.number().default(10),
+    DB_HOST: z.string().min(1).default('127.0.0.1'),
+    DB_PORT: z.coerce.number().int().positive().default(3306),
+    DB_USER: z.string().min(1).default('ceo_user'),
+    DB_PASSWORD: z.string().min(1).default('ceo_password'),
+    DB_NAME: z.string().min(1).default('ceo_command_center'),
+    DB_CONNECTION_LIMIT: z.coerce.number().int().positive().default(10),
     JWT_SECRET: z.string().min(16),
-    AUTH_COOKIE_NAME: z.string().default('ceo_cc_token'),
-    INGESTION_CRON: z.string().default('0 6 * * *'),
-    DEFAULT_TIMEZONE: z.string().default('Asia/Kolkata'),
-    SNAPSHOT_DISCOVERY_START: z.string().default('07:25'),
-    SNAPSHOT_DISCOVERY_END: z.string().default('09:00'),
-    SNAPSHOT_DISCOVERY_INTERVAL_MINUTES: z.coerce.number().default(5),
-    SNAPSHOT_MAINTENANCE_CRON: z.string().default('30 11,15,19,23 * * *'),
+    AUTH_COOKIE_NAME: z.string().min(1).default('ceo_cc_token'),
+    AUTH_COOKIE_SECURE: boolFromEnv,
+    INGESTION_CRON: z.string().min(1).default('0 6 * * *'),
+    DEFAULT_TIMEZONE: z.string().min(1).default('Asia/Kolkata'),
+    SNAPSHOT_DISCOVERY_START: z.string().min(1).default('07:25'),
+    SNAPSHOT_DISCOVERY_END: z.string().min(1).default('09:00'),
+    SNAPSHOT_DISCOVERY_INTERVAL_MINUTES: z.coerce.number().int().positive().default(5),
+    SNAPSHOT_MAINTENANCE_CRON: z.string().min(1).default('30 11,15,19,23 * * *'),
     GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
     GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
-    ALLOWED_ORIGINS: z.string().optional().transform((value) => {
+    ALLOWED_ORIGINS: z
+        .string()
+        .optional()
+        .transform((value) => {
         if (!value?.trim())
             return [];
         return value.split(',').map((part) => part.trim()).filter(Boolean);
     }),
+})
+    .superRefine((data, ctx) => {
+    const isProd = data.NODE_ENV === 'production';
+    if (isProd) {
+        try {
+            const clientHost = new URL(data.CLIENT_ORIGIN).hostname;
+            if (clientHost === 'localhost' || clientHost === '127.0.0.1') {
+                ctx.addIssue({
+                    code: 'custom',
+                    path: ['CLIENT_ORIGIN'],
+                    message: 'CLIENT_ORIGIN must be the public app URL in production (not localhost)',
+                });
+            }
+        }
+        catch {
+            // url() schema already validates format
+        }
+    }
+    if (isProd && data.JWT_SECRET.length < 32) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['JWT_SECRET'],
+            message: 'JWT_SECRET must be at least 32 characters in production',
+        });
+    }
+    if (isProd && data.DB_PASSWORD === 'ceo_password') {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['DB_PASSWORD'],
+            message: 'Set a non-default DB_PASSWORD in production',
+        });
+    }
+    const hasGoogleCreds = Boolean(data.GOOGLE_APPLICATION_CREDENTIALS?.trim()) ||
+        Boolean(data.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
+    if (isProd && !hasGoogleCreds) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['GOOGLE_APPLICATION_CREDENTIALS'],
+            message: 'GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_SERVICE_ACCOUNT_JSON is required in production',
+        });
+    }
+    if (data.GOOGLE_APPLICATION_CREDENTIALS && !existsSync(data.GOOGLE_APPLICATION_CREDENTIALS)) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['GOOGLE_APPLICATION_CREDENTIALS'],
+            message: `Google credentials file not found: ${data.GOOGLE_APPLICATION_CREDENTIALS}`,
+        });
+    }
+    for (const origin of data.ALLOWED_ORIGINS) {
+        try {
+            z.string().url().parse(origin);
+        }
+        catch {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['ALLOWED_ORIGINS'],
+                message: `Invalid ALLOWED_ORIGINS entry: ${origin}`,
+            });
+        }
+    }
 });
-export const env = envSchema.parse(process.env);
+function formatEnvError(error) {
+    return error.issues
+        .map((issue) => {
+        const path = issue.path.length > 0 ? issue.path.join('.') : 'environment';
+        return `  - ${path}: ${issue.message}`;
+    })
+        .join('\n');
+}
+let parsedEnv;
+try {
+    parsedEnv = envSchema.parse(process.env);
+}
+catch (error) {
+    if (error instanceof z.ZodError) {
+        console.error('Environment validation failed:\n' + formatEnvError(error));
+        process.exit(1);
+    }
+    throw error;
+}
+export const env = parsedEnv;
 export const isProduction = env.NODE_ENV === 'production';
