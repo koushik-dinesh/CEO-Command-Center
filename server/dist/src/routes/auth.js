@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { env, isProduction } from '../config/env.js';
+import { env } from '../config/env.js';
 import { requireAuth } from '../middleware/auth.js';
 import { AuthService } from '../services/AuthService.js';
+import { authCookieOptions } from '../utils/authCookie.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 const router = Router();
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1) });
@@ -14,16 +15,11 @@ function readAuthToken(req) {
 router.post('/login', asyncHandler(async (req, res) => {
     const payload = loginSchema.parse(req.body);
     const { user, token } = await AuthService.login(payload.email, payload.password);
-    res.cookie(env.AUTH_COOKIE_NAME, token, {
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: isProduction,
-        maxAge: 12 * 60 * 60 * 1000,
-    });
-    res.json({ user });
+    res.cookie(env.AUTH_COOKIE_NAME, token, authCookieOptions());
+    res.json({ user, token });
 }));
 router.post('/logout', (_req, res) => {
-    res.clearCookie(env.AUTH_COOKIE_NAME);
+    res.clearCookie(env.AUTH_COOKIE_NAME, authCookieOptions(0));
     res.json({ ok: true });
 });
 router.get('/me', asyncHandler(async (req, res) => {
