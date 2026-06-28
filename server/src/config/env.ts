@@ -38,6 +38,10 @@ const envSchema = z.object({
   SNAPSHOT_MAINTENANCE_CRON: z.string().default('30 11,15,19,23 * * *'),
   GOOGLE_APPLICATION_CREDENTIALS: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  ALLOWED_ORIGINS: z.string().optional().transform((value) => {
+    if (!value?.trim()) return [] as string[];
+    return value.split(',').map((part) => part.trim()).filter(Boolean);
+  }),
 });
 
 export const env = envSchema.parse(process.env);

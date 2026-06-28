@@ -2,19 +2,28 @@ import type { AuthUser, DashboardResponse, DriveExplorerResponse, IngestionRunRe
 import type { CommandCenterFilters, CommandCenterResponse, ComparisonResponse, SnapshotSyncStartResponse, SnapshotSyncStatusResponse } from '../types/command-center';
 import type { HrExpenseListResponse, HrExpensePayload, HrExpenseRecord } from '../types/productivity';
 import type { PbtCalculatedRecord, PbtCalculatedResponse, PbtHistoricalResponse, PbtHrExpenseResponse, PbtInputPayload, PbtRevenueResponse } from '../types/pbt';
+import { getAuthToken, setAuthToken } from './authToken.js';
+
+export { setAuthToken };
 
 /** Empty default: same-origin `/api/*` (reverse proxy in prod; Vite proxy in dev). Set full URL only when API is on another host. */
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
     ...options,
   });
+
+  if (response.status === 401) {
+    setAuthToken(null);
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({ message: 'Request failed' }));
@@ -26,7 +35,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   login(email: string, password: string) {
-    return request<{ user: AuthUser }>('/api/auth/login', {
+    return request<{ user: AuthUser; token: string }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });

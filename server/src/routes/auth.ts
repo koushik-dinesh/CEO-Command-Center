@@ -19,7 +19,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   const payload = loginSchema.parse(req.body);
   const { user, token } = await AuthService.login(payload.email, payload.password);
   res.cookie(env.AUTH_COOKIE_NAME, token, authCookieOptions());
-  res.json({ user });
+  res.json({ user, token });
 }));
 
 router.post('/logout', (_req, res) => {

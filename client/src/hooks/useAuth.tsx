@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { api } from '../services/api';
+import { api, setAuthToken } from '../services/api';
 import type { AuthUser } from '../types';
 
 interface AuthContextValue {
@@ -26,15 +26,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     isLoading,
     async login(email, password) {
-      const { user: loggedInUser } = await api.login(email, password);
+      const { user: loggedInUser, token } = await api.login(email, password);
+      setAuthToken(token);
       const session = await api.me();
       if (!session.user) {
-        throw new Error('Login succeeded but the session cookie was not saved. If you use HTTP, set AUTH_COOKIE_SECURE=false on the server.');
+        throw new Error('Login succeeded but the session was not saved. Check server AUTH_COOKIE_SECURE=false for HTTP.');
       }
       setUser(session.user ?? loggedInUser);
     },
     async logout() {
       await api.logout();
+      setAuthToken(null);
       setUser(null);
     },
   }), [isLoading, user]);
