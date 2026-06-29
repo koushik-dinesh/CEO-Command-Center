@@ -8,7 +8,7 @@ import { buildInventoryDaysIntelligence, buildInventoryDaysKpi, buildInventoryDa
 import { normalizeSnapshotDate, resolveSnapshotDateFromBatch } from '../snapshots/snapshotDate.js';
 import { PbtService } from '../pbt/PbtService.js';
 import { ProductivityService, buildProductivitySummaryBullets } from '../productivity/ProductivityService.js';
-import { getFetchActivitySnapshot } from '../ingestion/fetchActivityLog.js';
+import { getTodaySyncHistory } from '../ingestion/syncHistoryService.js';
 import { extractCoreMetrics, generateInsights, generateDrilldownSummaries, buildKpi, buildComparisonMetric, extractRevenuePeriods, buildRevenueSubMetrics } from './insights.js';
 import { buildSnapshotAvailability } from '../snapshots/snapshotAvailability.js';
 function payloadMap(batch) {
@@ -188,44 +188,7 @@ function resolveCoreMetrics(metricsRow, batch) {
     });
 }
 async function buildHistories() {
-    const metricsCount = await SnapshotMetricsRepository.count();
-    if (metricsCount > 0)
-        return buildHistoriesFromMetrics();
-    return buildHistoriesFallback();
-}
-async function buildHistoriesFallback() {
-    const [revenueRows, cogsRows, inventoryRows, deadRows] = await Promise.all([
-        ReportSnapshotRepository.historyForType('REVENUE_VS_COGS', 120),
-        ReportSnapshotRepository.historyForType('REVENUE_VS_COGS', 120),
-        ReportSnapshotRepository.historyForType('INVENTORY_BY_WAREHOUSE', 120),
-        ReportSnapshotRepository.historyForType('DEAD_SLOW_MOVING_STOCK', 120),
-    ]);
-    const revenueHistory = revenueRows
-        .map((row) => {
-        const payload = row.payloadJson;
-        const value = payload.total?.ytdRevenue ?? 0;
-        return { snapshotKey: row.snapshotKey, snapshotDate: row.snapshotDate, value };
-    })
-        .filter((point) => point.value > 0);
-    const grossProfitHistory = revenueRows.map((row) => {
-        const payload = row.payloadJson;
-        const rev = payload.total?.ytdRevenue ?? 0;
-        const cogs = payload.total?.ytdCogs ?? 0;
-        return { snapshotKey: row.snapshotKey, snapshotDate: row.snapshotDate, value: rev - cogs };
-    });
-    const marginHistory = cogsRows.map((row) => {
-        const payload = row.payloadJson;
-        return { snapshotKey: row.snapshotKey, snapshotDate: row.snapshotDate, value: payload.total?.grossProfitPct ?? 0 };
-    });
-    const inventoryHistory = inventoryRows.map((row) => {
-        const payload = row.payloadJson;
-        return { snapshotKey: row.snapshotKey, snapshotDate: row.snapshotDate, value: payload.totalValue };
-    });
-    const deadHistory = deadRows.map((row) => {
-        const payload = row.payloadJson;
-        return { snapshotKey: row.snapshotKey, snapshotDate: row.snapshotDate, dead: payload.deadStockValue, slow: payload.slowMovingValue };
-    });
-    return { revenueHistory, grossProfitHistory, marginHistory, inventoryHistory, deadHistory };
+    return buildHistoriesFromMetrics();
 }
 export class CommandCenterService {
     async resolveSnapshotKey(snapshotKey) {
@@ -396,7 +359,7 @@ export class CommandCenterService {
                 warehouses: [...new Set((current.inventory?.rows ?? []).map((row) => row.name))],
             },
             syncedAt: new Date().toISOString(),
-            fetchActivity: getFetchActivitySnapshot(),
+            syncHistory: await getTodaySyncHistory(),
         };
         const apiCopqKpi = response.kpis.find((kpi) => kpi.key === 'copq') ?? null;
         logO34Stage('API O34', {

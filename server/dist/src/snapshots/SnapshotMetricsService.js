@@ -2,7 +2,6 @@ import { extractCoreMetrics } from '../command-center/insights.js';
 import { computeInventoryDaysMetrics } from '../command-center/inventoryDays.js';
 import { ReportSnapshotRepository } from '../repositories/ReportSnapshotRepository.js';
 import { SnapshotMetricsRepository } from '../repositories/SnapshotMetricsRepository.js';
-import { refreshRevenueDrilldownCacheFromSnapshot } from '../revenue/revenue-drilldown-builder.js';
 import { isCompleteReportCount, REQUIRED_SNAPSHOT_REPORT_COUNT } from './snapshotCompleteness.js';
 function payloadMap(batch) {
     const map = new Map(batch.map((row) => [row.reportType, row.payloadJson]));
@@ -58,15 +57,6 @@ export class SnapshotMetricsService {
             fileNames: batch.map((row) => row.fileName),
             computedAt,
         });
-        const salespersonRow = batch.find((row) => row.reportType === 'REVENUE_BY_SALESPERSON');
-        if (salespersonRow) {
-            try {
-                await refreshRevenueDrilldownCacheFromSnapshot(salespersonRow);
-            }
-            catch (error) {
-                console.warn(`[snapshot-metrics] Revenue drilldown cache update failed for ${snapshotKey}`, error);
-            }
-        }
     }
     static async recomputeForSnapshotKeys(snapshotKeys) {
         for (const snapshotKey of snapshotKeys) {

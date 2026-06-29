@@ -122,8 +122,8 @@ async function main() {
             value: periods.copqQtd,
         },
         qaSavedSourceCell: 'T5',
-        previousValueSource: 'prior kpi_values row with sourceCell=O34',
-        trendSource: 'kpi_values history filtered to sourceCell=O34 only',
+        previousValueSource: 'prior kpi_value_history row with sourceCell=O34',
+        trendSource: 'kpi_value_history filtered to sourceCell=O34 only',
     }, null, 2));
     console.log('\n=== FINAL KPI CARD VALUES ===');
     console.log(JSON.stringify({

@@ -20,6 +20,23 @@ describe('parseNcCopqRecords', () => {
         expect(parsed.records).toHaveLength(5);
         expect(parsed.records.map((row) => row.sourceKey)).toEqual(['NC-001', 'NC-002', 'NC-003', 'NC-004', 'NC-OLD']);
     });
+    it('disambiguates duplicate NC numbers without dropping rows or changing ncNumber', () => {
+        const duplicateValues = [
+            ['NC DATE', 'FINAL COPQ', 'NC Number'],
+            ['2026-04-10', 100000, 'NC-DUP'],
+            ['2026-04-11', 50000, 'NC-DUP'],
+            ['2026-04-12', 25000, 'NC-DUP'],
+        ];
+        const parsed = parseNcCopqRecords(duplicateValues, {
+            copqColumn: 'FINAL COPQ',
+            dateColumn: 'NC DATE',
+            sourceKeyColumn: 'NC Number',
+        });
+        expect(parsed.records).toHaveLength(3);
+        expect(parsed.records.map((row) => row.sourceKey)).toEqual(['NC-DUP', 'NC-DUP#2', 'NC-DUP#3']);
+        expect(parsed.records.every((row) => row.ncNumber === 'NC-DUP')).toBe(true);
+        expect(parsed.records.reduce((sum, row) => sum + row.finalCopq, 0)).toBe(175000);
+    });
 });
 describe('calculateCopqPeriodTotals', () => {
     it('sums MTD and QTD from NC record dates using financial year quarter boundaries', () => {

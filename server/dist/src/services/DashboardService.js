@@ -37,15 +37,15 @@ async function prepareHistory(definitionCode, history) {
             historyNote: null,
         };
     }
-    const sourceSnapshots = await StagingRecordRepository.revenueSnapshots(8);
-    if (sourceSnapshots.length < 3) {
+    const analyticsHistory = await StagingRecordRepository.revenueSnapshots(8);
+    if (analyticsHistory.length < 3) {
         return {
             history: [],
             historyNote: 'Not enough history available',
         };
     }
     return {
-        history: sourceSnapshots,
+        history: analyticsHistory,
         historyNote: null,
     };
 }

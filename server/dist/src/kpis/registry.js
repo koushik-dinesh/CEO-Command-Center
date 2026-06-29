@@ -6,3 +6,6 @@ export function getCalculator(code) {
 export function listCalculators() {
     return [...registry.values()];
 }
+export function allKpiCodes() {
+    return [...registry.keys()];
+}

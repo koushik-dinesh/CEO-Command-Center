@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { google } from 'googleapis';
-import { recordGoogleDriveFetch } from '../ingestion/fetchActivityLog.js';
 import { createGoogleAuth } from '../ingestion/googleAuth.js';
 import { DataSourceService } from '../services/DataSourceService.js';
 import { ReportSnapshotRepository } from '../repositories/ReportSnapshotRepository.js';
@@ -28,7 +27,6 @@ export class SnapshotEngine {
             }),
             SnapshotFileRegistryRepository.listAll(),
         ]);
-        recordGoogleDriveFetch('files.list', 'REVENUE_CSV');
         const result = {
             scanned: 0,
             processed: 0,
@@ -36,7 +34,9 @@ export class SnapshotEngine {
             errors: [],
             processedSnapshotDates: [],
             processedSnapshotKeys: [],
+            files: [],
         };
+        const fileIndex = new Map();
         const affectedSnapshotKeys = new Set();
         const candidates = [];
         for (const file of listResponse.data.files ?? []) {
@@ -61,7 +61,6 @@ export class SnapshotEngine {
         const processOutcomes = await mapWithConcurrency(candidates, PROCESS_CONCURRENCY, async (driveFile) => {
             try {
                 const contentResponse = await this.drive.files.get({ fileId: driveFile.id, alt: 'media' }, { responseType: 'text' });
-                recordGoogleDriveFetch('files.get', driveFile.meta.reportType);
                 const content = String(contentResponse.data);
                 if (!content.trim()) {
                     return { kind: 'skipped' };
@@ -83,8 +82,8 @@ export class SnapshotEngine {
                         contentChecksum: checksum,
                     });
                     return forceRefresh
-                        ? { kind: 'refreshed', snapshotKey: driveFile.meta.snapshotKey }
-                        : { kind: 'skipped', snapshotKey: driveFile.meta.snapshotKey };
+                        ? { kind: 'refreshed', snapshotKey: driveFile.meta.snapshotKey, reportType: driveFile.meta.reportType }
+                        : { kind: 'skipped', snapshotKey: driveFile.meta.snapshotKey, reportType: driveFile.meta.reportType };
                 }
                 const payload = processReport(content, driveFile.meta);
                 await ReportSnapshotRepository.upsert({
@@ -110,12 +109,14 @@ export class SnapshotEngine {
                     kind: 'processed',
                     snapshotKey: driveFile.meta.snapshotKey,
                     snapshotDate: driveFile.meta.snapshotDate,
+                    reportType: driveFile.meta.reportType,
                 };
             }
             catch (error) {
                 return {
                     kind: 'error',
                     fileName: driveFile.name,
+                    reportType: driveFile.meta.reportType,
                     error: error instanceof Error ? error.message : 'Unknown processing error',
                 };
             }
@@ -129,16 +130,23 @@ export class SnapshotEngine {
                 continue;
             }
             if (outcome.kind === 'error') {
-                result.errors.push({ fileName: outcome.fileName, error: outcome.error });
+                result.errors.push({ fileName: outcome.reportType, error: outcome.error });
+                fileIndex.set(outcome.reportType, {
+                    name: outcome.reportType,
+                    status: 'failed',
+                    error: outcome.error,
+                });
                 continue;
             }
             if (outcome.kind === 'refreshed') {
                 result.skipped += 1;
                 affectedSnapshotKeys.add(outcome.snapshotKey);
+                fileIndex.set(outcome.reportType, { name: outcome.reportType, status: 'success' });
                 continue;
             }
             result.processed += 1;
             affectedSnapshotKeys.add(outcome.snapshotKey);
+            fileIndex.set(outcome.reportType, { name: outcome.reportType, status: 'success' });
             if (!result.processedSnapshotDates.includes(outcome.snapshotDate)) {
                 result.processedSnapshotDates.push(outcome.snapshotDate);
             }
@@ -164,6 +172,7 @@ export class SnapshotEngine {
                 result.errors.push(...metricErrors);
             }
         }
+        result.files = [...fileIndex.values()].sort((a, b) => a.name.localeCompare(b.name));
         return result;
     }
     async getPayload(snapshotKey, reportType) {

@@ -122,7 +122,14 @@ export function parseNcCopqRecords(values, config) {
         };
     }
     const records = [];
+    const sourceKeyOccurrences = new Map();
     let rejectedRowCount = 0;
+    const uniqueSourceKey = (baseKey) => {
+        const normalized = baseKey.trim() || 'unknown';
+        const seen = sourceKeyOccurrences.get(normalized) ?? 0;
+        sourceKeyOccurrences.set(normalized, seen + 1);
+        return seen === 0 ? normalized : `${normalized}#${seen + 1}`;
+    };
     for (let rowIndex = headerRowIndex + 1; rowIndex < values.length; rowIndex += 1) {
         const row = values[rowIndex];
         if (!Array.isArray(row)) {
@@ -136,9 +143,10 @@ export function parseNcCopqRecords(values, config) {
             continue;
         }
         const sourceKeyRaw = sourceKeyColumnIndex >= 0 ? row[sourceKeyColumnIndex] : `row-${rowIndex + 1}`;
-        const sourceKey = String(sourceKeyRaw ?? `row-${rowIndex + 1}`).trim() || `row-${rowIndex + 1}`;
-        const ncNumberRaw = ncNumberColumnIndex >= 0 ? row[ncNumberColumnIndex] : sourceKey;
-        const ncNumber = cellText(ncNumberRaw) || sourceKey;
+        const sourceKeyBase = String(sourceKeyRaw ?? `row-${rowIndex + 1}`).trim() || `row-${rowIndex + 1}`;
+        const sourceKey = uniqueSourceKey(sourceKeyBase);
+        const ncNumberRaw = ncNumberColumnIndex >= 0 ? row[ncNumberColumnIndex] : sourceKeyBase;
+        const ncNumber = cellText(ncNumberRaw) || sourceKeyBase;
         const product = productColumnIndex >= 0 ? cellText(row[productColumnIndex]) || 'Unspecified' : 'Unspecified';
         const department = departmentColumnIndex >= 0 ? cellText(row[departmentColumnIndex]) || 'Unassigned' : 'Unassigned';
         const rootCausePrimary = rootCauseColumnIndex >= 0 ? cellText(row[rootCauseColumnIndex]) : '';

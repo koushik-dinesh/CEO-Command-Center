@@ -41,6 +41,13 @@ export class SnapshotMetricsRepository {
        LIMIT 1`, [snapshotKey]);
         return row ? mapRow(row) : null;
     }
+    static async findLatestComplete() {
+        const row = await queryOne(`SELECT * FROM snapshot_metrics
+       WHERE reportCount >= ${REQUIRED_SNAPSHOT_REPORT_COUNT}
+       ORDER BY snapshotTimestamp DESC
+       LIMIT 1`);
+        return row ? mapRow(row) : null;
+    }
     static async upsert(data) {
         await execute(`INSERT INTO snapshot_metrics
        (snapshotKey, snapshotDate, snapshotTimestamp, revenue, grossProfit, grossMargin,
@@ -95,11 +102,34 @@ export class SnapshotMetricsRepository {
        LIMIT ?`, [limit]);
         return rows.map(mapRow);
     }
+    /** Latest complete snapshot per calendar day — replaces analytics_daily_snapshots. */
+    static async listDailyRevenueHistory(limit = 8) {
+        const rows = await queryRows(`SELECT sm.snapshotTimestamp, sm.revenue
+       FROM snapshot_metrics sm
+       INNER JOIN (
+         SELECT snapshotDate, MAX(snapshotTimestamp) AS maxTimestamp
+         FROM snapshot_metrics
+         WHERE reportCount >= ${REQUIRED_SNAPSHOT_REPORT_COUNT} AND revenue IS NOT NULL
+         GROUP BY snapshotDate
+       ) latest ON sm.snapshotDate = latest.snapshotDate AND sm.snapshotTimestamp = latest.maxTimestamp
+       WHERE sm.reportCount >= ${REQUIRED_SNAPSHOT_REPORT_COUNT}
+       ORDER BY sm.snapshotDate ASC
+       LIMIT ?`, [limit]);
+        return rows.map((row) => ({
+            calculatedAt: row.snapshotTimestamp.toISOString(),
+            value: String(row.revenue ?? 0),
+        }));
+    }
     static async deleteByKey(snapshotKey) {
         await execute('DELETE FROM snapshot_metrics WHERE snapshotKey = ?', [snapshotKey]);
     }
     static async deleteIncomplete() {
         const result = await execute(`DELETE FROM snapshot_metrics WHERE reportCount < ${REQUIRED_SNAPSHOT_REPORT_COUNT}`);
+        return result.affectedRows ?? 0;
+    }
+    static async deleteOlderThan(retentionDays) {
+        const result = await execute(`DELETE FROM snapshot_metrics
+       WHERE snapshotDate < DATE_SUB(UTC_DATE(), INTERVAL ? DAY)`, [retentionDays]);
         return result.affectedRows ?? 0;
     }
     static async count() {

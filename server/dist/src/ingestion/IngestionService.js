@@ -2,12 +2,19 @@ import { createHash } from 'node:crypto';
 import { transaction } from '../db/mysql.js';
 import { ProcessingStatus, SourceProvider, SourceType } from '../db/types.js';
 import { KpiCalculationService } from '../kpis/KpiCalculationService.js';
+import { resolveKpiCodesForSources } from '../kpis/sourceKpiMap.js';
+import { allKpiCodes } from '../kpis/registry.js';
 import { DataSourceMutationRepository } from '../repositories/DataSourceMutationRepository.js';
 import { ProcessingLogRepository } from '../repositories/ProcessingLogRepository.js';
 import { StagingRecordRepository } from '../repositories/StagingRecordRepository.js';
 import { UploadedFileRepository } from '../repositories/UploadedFileRepository.js';
 import { SnapshotEngine } from '../reports/SnapshotEngine.js';
 import { DataSourceService } from '../services/DataSourceService.js';
+import { CopqAnalyticsService } from '../copq/CopqAnalyticsService.js';
+import { loadCopqDataSourceContext } from '../copq/copqNcParseConfig.js';
+import { extractNcRecordsFromCopqRaw } from '../copq/copqRawPayload.js';
+import { isDuplicateStagingSource } from '../kpis/duplicateStagingSources.js';
+import { recalcSnapshotDerivedKpis } from '../kpis/snapshotDerivedKpis.js';
 import { parseCsv, sheetValuesToRows } from './csvParser.js';
 import { GoogleDriveService } from './googleDriveService.js';
 import { GoogleSheetsService } from './googleSheetsService.js';
@@ -50,17 +57,29 @@ export class IngestionService {
     snapshotEngine = new SnapshotEngine();
     async runAll(runType = 'manual', options = {}) {
         const sources = await DataSourceService.activeSources();
-        const results = [];
+        const sourceResults = [];
+        const changedSourceCodes = [];
         let lastSuccessfulRunId;
         for (const source of sources) {
             const result = await this.processSource(source, runType);
-            results.push(result);
+            sourceResults.push(result);
+            if (result.dataChanged) {
+                changedSourceCodes.push(result.sourceCode);
+            }
             if (result.status === ProcessingStatus.SUCCESS || result.status === ProcessingStatus.PARTIAL) {
                 lastSuccessfulRunId = result.processingLogId;
             }
         }
-        if (lastSuccessfulRunId || options.alwaysRecalculateKpis || runType === 'manual') {
-            await this.kpiCalculationService.calculateAndPersist({ sourceRunId: lastSuccessfulRunId });
+        let recalculatedKpiCodes = [];
+        const kpiCodes = options.alwaysRecalculateKpis === true || runType === 'manual'
+            ? allKpiCodes()
+            : resolveKpiCodesForSources(changedSourceCodes);
+        if (kpiCodes.length > 0) {
+            await this.kpiCalculationService.calculateAndPersist({
+                sourceRunId: lastSuccessfulRunId,
+                codes: kpiCodes,
+            });
+            recalculatedKpiCodes = kpiCodes;
         }
         const emptySnapshotResult = {
             scanned: 0,
@@ -69,12 +88,16 @@ export class IngestionService {
             errors: [],
             processedSnapshotDates: [],
             processedSnapshotKeys: [],
+            files: [],
         };
         let snapshotResult = emptySnapshotResult;
         try {
             snapshotResult = await this.snapshotEngine.syncFromDrive({
                 forceRefresh: options.forceSnapshotRefresh === true,
             });
+            if (snapshotResult.processed > 0 || options.forceSnapshotRefresh === true) {
+                await recalcSnapshotDerivedKpis(lastSuccessfulRunId);
+            }
         }
         catch (error) {
             console.warn('[ingestion:snapshot-engine] Snapshot sync failed', error);
@@ -83,7 +106,7 @@ export class IngestionService {
                 errors: [{ fileName: 'snapshot-sync', error: error instanceof Error ? error.message : 'Snapshot sync failed' }],
             };
         }
-        return { sourceResults: results, snapshotResult };
+        return { sourceResults, snapshotResult, changedSourceCodes, recalculatedKpiCodes };
     }
     async fetchSourcePayloads(source) {
         if (source.provider === SourceProvider.GOOGLE_DRIVE && source.sourceType === SourceType.CSV) {
@@ -99,6 +122,14 @@ export class IngestionService {
     }
     async processSource(source, runType) {
         const processingLog = await ProcessingLogRepository.create({ dataSourceId: source.id, runType, status: ProcessingStatus.PROCESSING });
+        if (isDuplicateStagingSource(source.code)) {
+            const updated = await ProcessingLogRepository.update(processingLog.id, {
+                status: ProcessingStatus.SKIPPED,
+                finishedAt: new Date(),
+                metadataJson: { reason: 'Staging ingestion disabled; canonical data from snapshot pipeline' },
+            });
+            return { sourceCode: source.code, status: updated.status, processingLogId: updated.id, dataChanged: false };
+        }
         try {
             const payloads = await this.fetchSourcePayloads(source);
             if (payloads.length === 0) {
@@ -107,7 +138,7 @@ export class IngestionService {
                     finishedAt: new Date(),
                     errorMessage: 'No source file found',
                 });
-                return { sourceCode: source.code, status: updated.status, processingLogId: updated.id };
+                return { sourceCode: source.code, status: updated.status, processingLogId: updated.id, dataChanged: false };
             }
             return await transaction(async (connection) => {
                 let uploadedFileId = null;
@@ -153,12 +184,30 @@ export class IngestionService {
                             logO34Stage('STAGING O34 REJECTED', normalized.rejected);
                         }
                     }
-                    await StagingRecordRepository.createMany(normalized.accepted.map((record) => ({
+                    if (source.code === 'COPQ_DASHBOARD_SHEET') {
+                        const copqContext = await loadCopqDataSourceContext();
+                        if (copqContext) {
+                            for (const record of normalized.accepted) {
+                                const ncRecords = extractNcRecordsFromCopqRaw(record.raw);
+                                if (!ncRecords?.values?.length)
+                                    continue;
+                                await CopqAnalyticsService.persistFromNcValues({
+                                    dataSourceId: copqContext.dataSourceId,
+                                    ncValues: ncRecords.values,
+                                    ncSheetName: ncRecords.sheetName,
+                                    normalized: record.normalized,
+                                    parseConfig: copqContext.parseConfig,
+                                    config: copqContext.config,
+                                }, connection);
+                            }
+                        }
+                    }
+                    await StagingRecordRepository.upsertMany(normalized.accepted.map((record) => ({
                         dataSourceId: source.id,
                         sourceDate: record.sourceDate,
                         sourceKey: record.sourceKey,
                         normalized: record.normalized,
-                        raw: record.raw,
+                        raw: source.code === 'COPQ_DASHBOARD_SHEET' ? {} : record.raw,
                     })), connection);
                     recordsRead += rows.length;
                     recordsAccepted += normalized.accepted.length;
@@ -175,7 +224,7 @@ export class IngestionService {
                         finishedAt: new Date(),
                         metadataJson: { reason: 'Duplicate provider file or checksum' },
                     }, connection);
-                    return { sourceCode: source.code, status: updated.status, processingLogId: updated.id };
+                    return { sourceCode: source.code, status: updated.status, processingLogId: updated.id, dataChanged: false };
                 }
                 const finalStatus = recordsRejected > 0 ? ProcessingStatus.PARTIAL : ProcessingStatus.SUCCESS;
                 const updated = await ProcessingLogRepository.update(processingLog.id, {
@@ -187,7 +236,7 @@ export class IngestionService {
                     recordsRejected,
                     metadataJson: processingMetadata(source, { accepted: extracted, rejected: rejected }),
                 }, connection);
-                return { sourceCode: source.code, status: updated.status, processingLogId: updated.id };
+                return { sourceCode: source.code, status: updated.status, processingLogId: updated.id, dataChanged: true };
             });
         }
         catch (error) {
@@ -196,7 +245,7 @@ export class IngestionService {
                 finishedAt: new Date(),
                 errorMessage: error instanceof Error ? error.message : 'Unknown ingestion error',
             });
-            return { sourceCode: source.code, status: updated.status, processingLogId: updated.id };
+            return { sourceCode: source.code, status: updated.status, processingLogId: updated.id, dataChanged: false };
         }
     }
 }

@@ -36,6 +36,12 @@ export class ProcessingLogRepository {
             throw new Error(`Processing log ${id} not found after update`);
         return updated;
     }
+    static async pruneOlderThan(retentionDays) {
+        if (retentionDays <= 0)
+            return 0;
+        const result = await execute('DELETE FROM processing_logs WHERE startedAt < DATE_SUB(UTC_TIMESTAMP(3), INTERVAL ? DAY)', [retentionDays]);
+        return Number(result.affectedRows ?? 0);
+    }
     static async latest(limit = 8) {
         const rows = await queryRows(`SELECT pl.*, ds.name AS dataSourceName
        FROM processing_logs pl

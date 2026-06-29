@@ -1,6 +1,7 @@
 import { KpiStatus } from '../db/types.js';
 import { Decimal } from 'decimal.js';
 import { toDecimal } from '../utils/numbers.js';
+import { revenuePeriodsFromSnapshot } from './snapshotKpiContext.js';
 function records(context, sourceCodes) {
     return sourceCodes.flatMap((sourceCode) => context.recordsBySource.get(sourceCode) ?? []);
 }
@@ -16,95 +17,98 @@ function current(value) {
 function unavailable(message) {
     return { value: null, status: KpiStatus.UNAVAILABLE, message };
 }
-const revenueMethodologyVersion = 'sales-revenue-customer-group-latest-file-ytd-v1';
-function revenueTotals(context) {
-    const allRevenueRecords = records(context, ['REVENUE_CSV']);
-    const latestSourceDate = allRevenueRecords
-        .map((record) => record.sourceDate)
-        .sort((a, b) => b.getTime() - a.getTime())[0];
-    const revenueRecords = latestSourceDate
-        ? allRevenueRecords.filter((record) => record.sourceDate.getTime() === latestSourceDate.getTime())
-        : [];
-    const revenueMtd = revenueRecords.reduce((total, record) => {
-        const value = toDecimal(record.normalized.revenueMtd);
-        return value ? total.plus(value) : total;
-    }, new Decimal(0));
-    const revenueQtd = revenueRecords.reduce((total, record) => {
-        const value = toDecimal(record.normalized.revenueQtd);
-        return value ? total.plus(value) : total;
-    }, new Decimal(0));
-    const revenueYtd = revenueRecords.reduce((total, record) => {
-        const value = toDecimal(record.normalized.revenueYtd);
-        return value ? total.plus(value) : total;
-    }, new Decimal(0));
-    const sourceFileName = revenueRecords.find((record) => typeof record.normalized.sourceFileName === 'string')?.normalized.sourceFileName;
-    const sourceLastUpdatedAt = revenueRecords
-        .map((record) => record.sourceDate)
-        .sort((a, b) => b.getTime() - a.getTime())[0]
-        ?.toISOString();
-    return { revenueRecords, revenueMtd, revenueQtd, revenueYtd, sourceFileName, sourceLastUpdatedAt, totalRevenueRowsAvailable: allRevenueRecords.length };
+const snapshotRevenueMethodologyVersion = 'snapshot-metrics-latest-complete-ytd-v1';
+function revenueFromSnapshot(context) {
+    const snapshot = context.snapshotContext;
+    if (!snapshot?.metrics.revenue)
+        return null;
+    const revenueYtd = new Decimal(snapshot.metrics.revenue);
+    if (revenueYtd.equals(0))
+        return null;
+    const periods = revenuePeriodsFromSnapshot(snapshot);
+    const revenueMtd = periods.revenueMTD != null ? new Decimal(periods.revenueMTD) : new Decimal(0);
+    const revenueQtd = periods.revenueQTD != null ? new Decimal(periods.revenueQTD) : new Decimal(0);
+    const fileNames = snapshot.metrics.fileNames;
+    return {
+        ...current(revenueYtd),
+        metadataJson: {
+            methodologyVersion: snapshotRevenueMethodologyVersion,
+            methodologyDescription: 'Latest complete Drive snapshot metrics; Revenue_YTD from snapshot_metrics.',
+            dataSource: 'snapshot_pipeline',
+            snapshotKey: snapshot.metrics.snapshotKey,
+            snapshotDate: snapshot.metrics.snapshotDate,
+            revenueMtd: revenueMtd.toDecimalPlaces(4).toString(),
+            revenueQtd: revenueQtd.toDecimalPlaces(4).toString(),
+            revenueYtd: revenueYtd.toDecimalPlaces(4).toString(),
+            sourceFileName: fileNames[0] ?? null,
+            sourceLastUpdatedAt: snapshot.metrics.snapshotTimestamp.toISOString(),
+            rowsAccepted: snapshot.metrics.reportCount,
+        },
+    };
 }
 function latestRecord(context, sourceCode) {
     return [...(context.recordsBySource.get(sourceCode) ?? [])].sort((a, b) => b.sourceDate.getTime() - a.sourceDate.getTime())[0];
 }
-function inventorySnapshots(context) {
-    const snapshots = new Map();
-    for (const record of records(context, ['INVENTORY_CSV'])) {
-        const value = toDecimal(record.normalized.inventoryValue);
-        if (!value)
-            continue;
-        const day = record.sourceDate.toISOString().slice(0, 10);
-        snapshots.set(day, (snapshots.get(day) ?? new Decimal(0)).plus(value));
-    }
-    return snapshots;
-}
 export const calculators = [
     {
         code: 'REVENUE',
-        requiredSources: ['REVENUE_CSV'],
+        requiredSources: [],
         calculate: (context) => {
-            const totals = revenueTotals(context);
-            if (totals.revenueRecords.length === 0 || totals.revenueYtd.equals(0)) {
-                return unavailable('No production revenue rows available');
-            }
-            return {
-                ...current(totals.revenueYtd),
-                metadataJson: {
-                    methodologyVersion: revenueMethodologyVersion,
-                    methodologyDescription: 'Sales_Revenue_by_Customer_Group latest source file; Revenue_YTD is the primary CEO Revenue KPI.',
-                    revenueMtd: totals.revenueMtd.toDecimalPlaces(4).toString(),
-                    revenueQtd: totals.revenueQtd.toDecimalPlaces(4).toString(),
-                    revenueYtd: totals.revenueYtd.toDecimalPlaces(4).toString(),
-                    sourceFileName: totals.sourceFileName ?? null,
-                    sourceLastUpdatedAt: totals.sourceLastUpdatedAt ?? null,
-                    rowsAccepted: totals.revenueRecords.length,
-                    totalRevenueRowsAvailable: totals.totalRevenueRowsAvailable,
-                },
-            };
+            const fromSnapshot = revenueFromSnapshot(context);
+            if (fromSnapshot)
+                return fromSnapshot;
+            return unavailable('No complete snapshot revenue metrics available');
         },
     },
     {
         code: 'INVENTORY_VALUE',
-        requiredSources: ['INVENTORY_CSV'],
+        requiredSources: [],
         calculate: (context) => {
-            const snapshots = inventorySnapshots(context);
-            const latestDay = [...snapshots.keys()].sort().at(-1);
-            return latestDay ? current(snapshots.get(latestDay)) : unavailable('No inventory snapshot available');
+            const snapshotValue = context.snapshotContext?.metrics.inventoryValue;
+            if (snapshotValue != null) {
+                return {
+                    ...current(new Decimal(snapshotValue)),
+                    metadataJson: {
+                        dataSource: 'snapshot_pipeline',
+                        snapshotKey: context.snapshotContext.metrics.snapshotKey,
+                        snapshotDate: context.snapshotContext.metrics.snapshotDate,
+                        sourceLastUpdatedAt: context.snapshotContext.metrics.snapshotTimestamp.toISOString(),
+                    },
+                };
+            }
+            return unavailable('No inventory snapshot metrics available');
         },
     },
     {
         code: 'COGS',
-        requiredSources: ['SAP_EXPORT_CSV', 'REVENUE_CSV'],
+        requiredSources: [],
         calculate: (context) => {
-            const value = sumMetric(context, ['SAP_EXPORT_CSV', 'REVENUE_CSV'], 'cogs');
-            return value.equals(0) ? unavailable('No COGS rows available') : current(value);
+            const snapshotCogs = context.snapshotContext?.metrics.ytdCogs;
+            if (snapshotCogs != null) {
+                const value = new Decimal(snapshotCogs);
+                if (!value.equals(0)) {
+                    return {
+                        ...current(value),
+                        metadataJson: {
+                            dataSource: 'snapshot_pipeline',
+                            snapshotKey: context.snapshotContext.metrics.snapshotKey,
+                            snapshotDate: context.snapshotContext.metrics.snapshotDate,
+                            sourceLastUpdatedAt: context.snapshotContext.metrics.snapshotTimestamp.toISOString(),
+                        },
+                    };
+                }
+            }
+            return unavailable('No COGS snapshot metrics available');
         },
     },
     {
         code: 'COPQ',
         requiredSources: ['COPQ_DASHBOARD_SHEET'],
         calculate: (context) => {
-            const record = latestRecord(context, 'COPQ_DASHBOARD_SHEET');
+            const headlineRecord = context.copqHeadline
+                ? { normalized: context.copqHeadline, sourceDate: new Date() }
+                : undefined;
+            const record = headlineRecord ?? latestRecord(context, 'COPQ_DASHBOARD_SHEET');
             const sourceCell = String(record?.normalized.sourceCell ?? '');
             const totalCopq = toDecimal(record?.normalized.totalCopq ?? record?.normalized.copqYtd);
             const copqBeforeQaClearance = toDecimal(record?.normalized.copqBeforeQaClearance);
@@ -155,15 +159,25 @@ export const calculators = [
     },
     {
         code: 'REVENUE_HR_COST_RATIO',
-        requiredSources: ['REVENUE_CSV', 'SAP_EXPORT_CSV', 'HR_COST_SHEET'],
+        requiredSources: ['HR_COST_SHEET'],
         calculate: (context) => {
-            const revenue = sumMetric(context, ['REVENUE_CSV', 'SAP_EXPORT_CSV'], 'revenue');
+            const snapshotRevenue = context.snapshotContext?.metrics.revenue;
+            if (snapshotRevenue == null)
+                return unavailable('No snapshot revenue metrics available');
+            const revenue = new Decimal(snapshotRevenue);
             const hrCost = sumMetric(context, ['HR_COST_SHEET'], 'hrCost');
             if (revenue.equals(0))
                 return unavailable('No revenue rows available');
             if (hrCost.equals(0))
                 return unavailable('HR cost is missing or zero');
-            return current(revenue.div(hrCost));
+            return {
+                ...current(revenue.div(hrCost)),
+                metadataJson: {
+                    dataSource: 'snapshot_pipeline',
+                    snapshotKey: context.snapshotContext.metrics.snapshotKey,
+                    revenueYtd: String(snapshotRevenue),
+                },
+            };
         },
     },
 ];

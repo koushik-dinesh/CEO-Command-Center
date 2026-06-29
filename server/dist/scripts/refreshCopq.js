@@ -8,6 +8,9 @@ import { GoogleSheetsService } from '../src/ingestion/googleSheetsService.js';
 import { sheetValuesToRows } from '../src/ingestion/csvParser.js';
 import { normalizeRows } from '../src/ingestion/sourceAdapters.js';
 import { KpiCalculationService } from '../src/kpis/KpiCalculationService.js';
+import { CopqAnalyticsService } from '../src/copq/CopqAnalyticsService.js';
+import { loadCopqDataSourceContext } from '../src/copq/copqNcParseConfig.js';
+import { extractNcRecordsFromCopqRaw } from '../src/copq/copqRawPayload.js';
 import { DataSourceRepository } from '../src/repositories/DataSourceRepository.js';
 import { StagingRecordRepository } from '../src/repositories/StagingRecordRepository.js';
 import { UploadedFileRepository } from '../src/repositories/UploadedFileRepository.js';
@@ -61,12 +64,29 @@ async function main() {
             sizeBytes: payload.sizeBytes ?? null,
             status: ProcessingStatus.SUCCESS,
         }, connection);
-        await StagingRecordRepository.createMany(normalized.accepted.map((record) => ({
+        const copqContext = await loadCopqDataSourceContext();
+        if (copqContext) {
+            for (const record of normalized.accepted) {
+                const ncRecords = extractNcRecordsFromCopqRaw(record.raw);
+                if (!ncRecords?.values?.length)
+                    continue;
+                const result = await CopqAnalyticsService.persistFromNcValues({
+                    dataSourceId: copqContext.dataSourceId,
+                    ncValues: ncRecords.values,
+                    ncSheetName: ncRecords.sheetName,
+                    normalized: record.normalized,
+                    parseConfig: copqContext.parseConfig,
+                    config: copqContext.config,
+                }, connection);
+                console.log('\nNC facts persisted:', result);
+            }
+        }
+        await StagingRecordRepository.upsertMany(normalized.accepted.map((record) => ({
             dataSourceId: source.id,
             sourceDate: record.sourceDate,
             sourceKey: record.sourceKey,
             normalized: record.normalized,
-            raw: record.raw,
+            raw: {},
         })), connection);
         console.log('\nStaging record created:', uploadedFile.id);
     });

@@ -1,5 +1,4 @@
 import { Decimal } from 'decimal.js';
-import { RevenueDrilldownCacheRepository } from '../repositories/RevenueDrilldownCacheRepository.js';
 function decimalString(value) {
     return new Decimal(value).toDecimalPlaces(4).toString();
 }
@@ -52,19 +51,4 @@ export function buildDrilldownFromSalespersonSnapshot(row) {
             revenueAmount: entry.revenueAmount,
         })),
     };
-}
-export async function refreshRevenueDrilldownCacheFromSnapshot(row) {
-    const payloadJson = buildDrilldownFromSalespersonSnapshot(row);
-    const { fileDate, fileTimestamp } = fileTimingFromSnapshot(row);
-    await RevenueDrilldownCacheRepository.upsert({
-        providerFileId: row.providerFileId,
-        fileName: row.fileName,
-        mimeType: 'text/csv',
-        modifiedTime: row.snapshotTimestamp,
-        sizeBytes: null,
-        fileDate,
-        fileTimestamp,
-        checksum: row.checksum,
-        payloadJson,
-    });
 }
