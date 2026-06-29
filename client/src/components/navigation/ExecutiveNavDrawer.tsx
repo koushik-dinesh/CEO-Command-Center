@@ -1,7 +1,9 @@
+import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { PRIMARY_NAV, navHref, type NavItem } from '../../config/navigation';
 import ThemeToggle from '../ThemeToggle';
+import { CloseIcon, NavChevronIcon, SignOutIcon, SyncIcon, ThemeIcon } from './DrawerIcons';
 
 const SYMBOL_SRC = '/branding/biometric-cables-symbol.png';
 
@@ -26,6 +28,12 @@ export default function ExecutiveNavDrawer({
   onRefresh,
   onSignOut,
 }: ExecutiveNavDrawerProps) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -37,7 +45,7 @@ export default function ExecutiveNavDrawer({
       <button
         type="button"
         className="exec-nav-panel-backdrop"
-        aria-label="Close navigation"
+        aria-label="Close navigation panel"
         tabIndex={open ? 0 : -1}
         onClick={onClose}
       />
@@ -47,38 +55,56 @@ export default function ExecutiveNavDrawer({
         className="exec-nav-panel"
         role="dialog"
         aria-modal="true"
-        aria-label="Executive navigation"
+        aria-label="Navigation and settings"
       >
-        <header className="exec-nav-panel-header">
-          <div className="exec-nav-panel-platform">
-            <p className="exec-nav-panel-platform-title">CEO Command Center</p>
-            <p className="exec-nav-panel-platform-subtitle">Executive Intelligence Platform</p>
+        <header className="exec-drawer-header">
+          <div className="exec-drawer-header-brand">
+            <img
+              src={SYMBOL_SRC}
+              alt=""
+              aria-hidden="true"
+              className="exec-drawer-header-logo"
+              width={40}
+              height={55}
+              decoding="async"
+            />
+            <div className="exec-drawer-header-copy">
+              <p className="exec-drawer-header-name">Biometric Cables</p>
+              <p className="exec-drawer-header-sub">CEO Command Center</p>
+            </div>
           </div>
 
-          <button type="button" className="exec-nav-panel-close" onClick={onClose} aria-label="Close navigation">
-            <span aria-hidden="true">×</span>
+          <button
+            ref={closeRef}
+            type="button"
+            className="exec-drawer-close"
+            onClick={onClose}
+            aria-label="Close navigation panel"
+          >
+            <CloseIcon />
           </button>
         </header>
 
-        <div className="exec-nav-panel-main">
+        <div className="exec-drawer-body">
           {PRIMARY_NAV.length > 0 ? (
-            <section className="exec-nav-panel-section">
-              <p className="exec-nav-panel-section-label">Intelligence Modules</p>
-              <nav className="exec-nav-panel-menu" aria-label="Primary navigation">
+            <section className="exec-drawer-section">
+              <h2 className="exec-drawer-section-label">Intelligence Modules</h2>
+              <nav className="exec-drawer-nav" aria-label="Primary navigation">
                 {PRIMARY_NAV.map((item: NavItem) => {
                   const isActive = item.id === activeId;
                   return (
                     <Link
                       key={item.id}
                       to={navHref(item.path, snapshotKey)}
-                      className={`exec-nav-panel-item ${isActive ? 'exec-nav-panel-item-active' : ''}`}
+                      className={`exec-drawer-nav-item ${isActive ? 'exec-drawer-nav-item-active' : ''}`}
                       onClick={onClose}
+                      aria-current={isActive ? 'page' : undefined}
                     >
-                      <span className="exec-nav-panel-item-indicator" aria-hidden="true" />
-                      <span className="exec-nav-panel-item-copy">
-                        <span className="exec-nav-panel-item-title">{item.label}</span>
-                        <span className="exec-nav-panel-item-sub">{item.menuSubtitle}</span>
+                      <span className="exec-drawer-nav-copy">
+                        <span className="exec-drawer-nav-title">{item.label}</span>
+                        <span className="exec-drawer-nav-sub">{item.menuSubtitle}</span>
                       </span>
+                      <NavChevronIcon className="exec-drawer-nav-chevron" />
                     </Link>
                   );
                 })}
@@ -86,61 +112,58 @@ export default function ExecutiveNavDrawer({
             </section>
           ) : null}
 
-          <section className="exec-nav-panel-section exec-nav-panel-section-utilities">
-            <p className="exec-nav-panel-section-label">Utilities</p>
-            <div className="exec-nav-panel-menu" role="group" aria-label="Utilities">
+          <section className="exec-drawer-section exec-drawer-section-actions" aria-label="Actions">
+            <h2 className="exec-drawer-section-label">Actions</h2>
+
+            <div className="exec-drawer-actions">
               <button
                 type="button"
-                className={`exec-nav-panel-item exec-nav-panel-item-action ${isRefreshing ? 'exec-sync-active' : ''}`}
+                className={`exec-drawer-action exec-drawer-action-primary ${isRefreshing ? 'exec-drawer-action-busy' : ''}`}
                 onClick={() => void onRefresh()}
-                disabled={isRefreshing}
+                disabled={isRefreshing || isLoading}
+                aria-busy={isRefreshing}
+                aria-label={isRefreshing ? 'Syncing and refreshing data' : 'Sync and refresh data from Google Drive'}
               >
-                <span className="exec-nav-panel-item-indicator exec-nav-panel-item-indicator-muted" aria-hidden="true" />
-                <span className="exec-nav-panel-item-copy">
-                  <span className="exec-nav-panel-item-title">{isRefreshing ? 'Syncing…' : 'Sync Data'}</span>
+                <span className="exec-drawer-action-icon exec-drawer-action-icon-accent" aria-hidden="true">
+                  <SyncIcon spinning={isRefreshing} />
+                </span>
+                <span className="exec-drawer-action-copy">
+                  <span className="exec-drawer-action-title">
+                    {isRefreshing ? 'Syncing…' : 'Sync & Refresh'}
+                  </span>
+                  <span className="exec-drawer-action-sub">
+                    Fetch the latest data from Google Drive.
+                  </span>
                 </span>
               </button>
 
-              <div className="exec-nav-panel-item exec-nav-panel-item-action exec-nav-panel-item-theme">
-                <span className="exec-nav-panel-item-indicator exec-nav-panel-item-indicator-muted" aria-hidden="true" />
-                <span className="exec-nav-panel-item-copy">
-                  <span className="exec-nav-panel-item-title">Theme</span>
+              <div className="exec-drawer-action exec-drawer-action-theme">
+                <span className="exec-drawer-action-icon" aria-hidden="true">
+                  <ThemeIcon />
                 </span>
-                <ThemeToggle />
+                <span className="exec-drawer-action-copy">
+                  <span className="exec-drawer-action-title">Theme</span>
+                </span>
+                <ThemeToggle variant="switch" />
               </div>
-
-              <button
-                type="button"
-                className="exec-nav-panel-item exec-nav-panel-item-action"
-                onClick={() => {
-                  onClose();
-                  onSignOut();
-                }}
-              >
-                <span className="exec-nav-panel-item-indicator exec-nav-panel-item-indicator-muted" aria-hidden="true" />
-                <span className="exec-nav-panel-item-copy">
-                  <span className="exec-nav-panel-item-title">Sign Out</span>
-                </span>
-              </button>
             </div>
           </section>
-
-          <footer className="exec-nav-panel-branding" aria-label="Biometric Cables">
-            <img
-              src={SYMBOL_SRC}
-              alt=""
-              aria-hidden="true"
-              className="exec-nav-panel-branding-symbol"
-              width={101}
-              height={139}
-              decoding="async"
-            />
-            <div className="exec-nav-panel-branding-text">
-              <p className="exec-nav-panel-branding-name">Biometric Cables</p>
-              <p className="exec-nav-panel-branding-tagline">Excellence till Acceptance</p>
-            </div>
-          </footer>
         </div>
+
+        <footer className="exec-drawer-footer">
+          <button
+            type="button"
+            className="exec-drawer-signout"
+            onClick={() => {
+              onClose();
+              onSignOut();
+            }}
+            aria-label="Sign out of CEO Command Center"
+          >
+            <SignOutIcon className="exec-drawer-signout-icon" />
+            <span className="exec-drawer-signout-label">Sign Out</span>
+          </button>
+        </footer>
       </aside>
     </div>,
     document.body,

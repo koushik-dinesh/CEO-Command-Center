@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import HeroKpiGrid from '../components/command-center/HeroKpiGrid';
 import ExecutiveTrendArea from '../components/command-center/ExecutiveTrendArea';
+import FetchingActivityPanel from '../components/command-center/FetchingActivityPanel';
 import { HomepageControls, ExecutiveInsightsPanel } from '../components/command-center/Controls';
 import { useCommandCenterContext } from '../context/CommandCenterContext';
 import { logCopqSourceDebug } from '../debug/copqSourceDebug';
@@ -68,6 +69,7 @@ export default function CommandCenterPage() {
 
       {data ? (
         <div className="space-y-6">
+          <FetchingActivityPanel activity={data.fetchActivity} isRefreshing={isRefreshing} />
           <HeroKpiGrid kpis={data.kpis} snapshotKey={data.snapshotKey} />
           <ExecutiveInsightsPanel insights={data.insights} />
           <ExecutiveTrendArea data={data} />

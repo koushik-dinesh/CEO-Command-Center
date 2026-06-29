@@ -1113,6 +1113,99 @@ button, a, input { -webkit-tap-highlight-color: transparent; }
 .cc-summary-list li { line-height: 1.5; }
 .cc-back-link { font-size: 0.8rem; font-weight: 600; color: var(--accent); text-decoration: none; }
 .cc-back-link:hover { text-decoration: underline; }
+
+.cc-fetch-activity-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cc-fetch-activity-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.65rem;
+}
+
+.cc-fetch-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.cc-fetch-activity-card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-muted);
+  padding: 12px 14px;
+}
+
+.cc-fetch-activity-label {
+  margin: 0;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.cc-fetch-activity-value {
+  margin: 6px 0 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.cc-fetch-activity-log {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.cc-fetch-activity-log-row {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+}
+
+.cc-fetch-activity-log-provider {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.cc-fetch-activity-log-operation {
+  color: var(--text-secondary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cc-fetch-activity-log-time {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.cc-fetch-activity-empty {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
 .cc-kpi-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: center; }
 .cc-kpi-label { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
 .cc-kpi-value { margin-top: 0.45rem; font-size: 1.65rem; font-weight: 700; color: var(--text-primary); }

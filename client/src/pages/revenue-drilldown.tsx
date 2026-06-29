@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
+import DrilldownBackLink from '../components/navigation/DrilldownBackLink';
+import { navHref } from '../config/navigation';
 import type { RevenueDrilldownResponse, RevenueSalespersonRow } from '../types';
 import { formatDate, formatDateTime, formatKpiValue } from '../utils/formatters';
 
@@ -119,6 +121,8 @@ function LeaderboardRow({ row, maxRevenue }: LeaderboardRowProps) {
 }
 
 export default function RevenueDrilldownPage() {
+  const [searchParams] = useSearchParams();
+  const snapshotKey = searchParams.get('snapshot') ?? undefined;
   const [data, setData] = useState<RevenueDrilldownResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -270,13 +274,21 @@ export default function RevenueDrilldownPage() {
 
   return (
     <>
-      <div className="dashboard-panel mb-8 flex flex-col justify-between gap-4 p-5 md:flex-row md:items-center">
-        <div>
-          <p className="eyebrow text-sm font-semibold uppercase tracking-[0.25em]">Revenue Drill-Down</p>
-          <h2 className="mt-2 text-xl font-semibold text-primary-theme">Salesperson Revenue Breakdown</h2>
-          <p className="mt-1 text-sm text-secondary-theme">Latest Salesperson revenue file from Google Drive.</p>
+      <div className="dashboard-panel mb-8 p-5">
+        <DrilldownBackLink
+          to="/intelligence/revenue"
+          label="Back to Revenue Intelligence"
+        />
+        <div className="mt-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <p className="eyebrow text-sm font-semibold uppercase tracking-[0.25em]">Revenue Drill-Down</p>
+            <h2 className="mt-2 text-xl font-semibold text-primary-theme">Salesperson Revenue Breakdown</h2>
+            <p className="mt-1 text-sm text-secondary-theme">Latest Salesperson revenue file from Google Drive.</p>
+          </div>
+          <Link to={navHref('/', snapshotKey)} className="piano-button-secondary px-4 py-3 text-sm font-semibold">
+            Command Center
+          </Link>
         </div>
-        <Link to="/" className="piano-button-secondary px-4 py-3 text-sm font-semibold">Back to dashboard</Link>
       </div>
 
       {isLoading ? <div className="h-80 animate-pulse rounded-2xl bg-[var(--surface-muted)]" /> : null}

@@ -214,8 +214,22 @@ export interface CommandCenterResponse {
     warehouses: string[];
   };
   syncedAt: string;
+  fetchActivity: FetchActivitySnapshot;
   /** Temporary COPQ source inspection payload — remove after validation. */
   copqSourceDebug?: import('./copqSourceDebug.js').CopqSourceDebugPayload;
+}
+
+export interface FetchActivityEntry {
+  provider: 'GOOGLE_DRIVE' | 'GOOGLE_SHEETS';
+  operation: string;
+  sourceCode?: string;
+  fetchedAt: string;
+}
+
+export interface FetchActivitySnapshot {
+  driveLastFetchedAt: string | null;
+  sheetsLastFetchedAt: string | null;
+  entries: FetchActivityEntry[];
 }
 
 export interface DrilldownSummary {

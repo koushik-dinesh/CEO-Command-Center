@@ -1,5 +1,6 @@
 import type { DataSourceRow as DataSource } from '../db/types.js';
 import { google } from 'googleapis';
+import { recordGoogleDriveFetch } from './fetchActivityLog.js';
 import { createGoogleAuth } from './googleAuth.js';
 import type { SourceConfig, SourcePayload } from './types.js';
 
@@ -24,12 +25,14 @@ export class GoogleDriveService {
       includeItemsFromAllDrives: true,
       supportsAllDrives: true,
     });
+    recordGoogleDriveFetch('files.list', source.code);
 
     const files = (listResponse.data.files ?? [])
       .filter((file) => file.id && file.name && (file.mimeType === 'text/csv' || file.name.toLowerCase().endsWith('.csv')));
 
-    return Promise.all(files.map(async (file) => {
+    const payloads = await Promise.all(files.map(async (file) => {
       const contentResponse = await this.drive.files.get({ fileId: file.id!, alt: 'media' }, { responseType: 'text' });
+      recordGoogleDriveFetch('files.get', source.code);
       return {
         providerFileId: file.id!,
         fileName: file.name!,
@@ -39,5 +42,6 @@ export class GoogleDriveService {
         content: String(contentResponse.data),
       };
     }));
+    return payloads;
   }
 }
