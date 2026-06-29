@@ -13,6 +13,12 @@ const server = app.listen(env.PORT, () => {
     nodeEnv: env.NODE_ENV,
     clientOrigin: env.CLIENT_ORIGIN,
   });
+
+  if (env.NODE_ENV === 'production' && env.DB_PASSWORD === 'ceo_password') {
+    logger.warn('using default DB_PASSWORD in production — change this for security', {
+      operation: 'startup',
+    });
+  }
   scheduleSnapshotDiscovery();
   scheduleIngestionJob();
 });

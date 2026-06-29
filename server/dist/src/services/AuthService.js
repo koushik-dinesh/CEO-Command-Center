@@ -1,6 +1,7 @@
-import { unauthorized } from '../utils/HttpError.js';
+import { HttpError, unauthorized } from '../utils/HttpError.js';
 import { UserRepository } from '../repositories/UserRepository.js';
 import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 function sanitizeUser(user) {
@@ -8,7 +9,17 @@ function sanitizeUser(user) {
 }
 export class AuthService {
     static async login(email, password) {
-        const user = await UserRepository.findByEmail(email);
+        let user;
+        try {
+            user = await UserRepository.findByEmail(email);
+        }
+        catch (error) {
+            logger.error('login database lookup failed', {
+                operation: 'auth.login',
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+            throw new HttpError('Authentication service unavailable', 503, 'AUTH_DB_UNAVAILABLE');
+        }
         if (!user || !user.isActive)
             throw unauthorized('Invalid email or password');
         const passwordMatches = await bcrypt.compare(password, user.passwordHash);

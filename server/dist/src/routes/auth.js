@@ -28,6 +28,7 @@ router.post('/login', loginRateLimit, asyncHandler(async (req, res) => {
             operation: 'auth.login',
             path: req.originalUrl,
             email: payload.email,
+            reason: error instanceof Error ? error.message : String(error),
         });
         throw error;
     }

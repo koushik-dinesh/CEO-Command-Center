@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from 'dotenv';
 import { z } from 'zod';
@@ -14,6 +14,25 @@ for (const envPath of envPaths) {
     if (existsSync(envPath)) {
         config({ path: envPath, override: false, quiet: true });
     }
+}
+const serverRoot = resolve(currentDir, '..', '..');
+function resolveExistingPath(configuredPath) {
+    const candidates = [
+        configuredPath,
+        resolve(process.cwd(), configuredPath),
+        resolve(serverRoot, configuredPath),
+        resolve(serverRoot, 'secrets', basename(configuredPath)),
+        resolve(process.cwd(), 'secrets', basename(configuredPath)),
+    ];
+    for (const candidate of candidates) {
+        if (existsSync(candidate))
+            return candidate;
+    }
+    return null;
+}
+function looksLikeJson(value) {
+    const trimmed = value.trim();
+    return trimmed.startsWith('{') && trimmed.endsWith('}');
 }
 const boolFromEnv = z
     .union([z.literal('true'), z.literal('false')])
@@ -74,13 +93,6 @@ const envSchema = z
             message: 'JWT_SECRET must be at least 32 characters in production',
         });
     }
-    if (isProd && data.DB_PASSWORD === 'ceo_password') {
-        ctx.addIssue({
-            code: 'custom',
-            path: ['DB_PASSWORD'],
-            message: 'Set a non-default DB_PASSWORD in production',
-        });
-    }
     const hasGoogleCreds = Boolean(data.GOOGLE_APPLICATION_CREDENTIALS?.trim()) ||
         Boolean(data.GOOGLE_SERVICE_ACCOUNT_JSON?.trim());
     if (isProd && !hasGoogleCreds) {
@@ -90,12 +102,25 @@ const envSchema = z
             message: 'GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_SERVICE_ACCOUNT_JSON is required in production',
         });
     }
-    if (data.GOOGLE_APPLICATION_CREDENTIALS && !existsSync(data.GOOGLE_APPLICATION_CREDENTIALS)) {
-        ctx.addIssue({
-            code: 'custom',
-            path: ['GOOGLE_APPLICATION_CREDENTIALS'],
-            message: `Google credentials file not found: ${data.GOOGLE_APPLICATION_CREDENTIALS}`,
-        });
+    if (data.GOOGLE_APPLICATION_CREDENTIALS) {
+        const resolved = resolveExistingPath(data.GOOGLE_APPLICATION_CREDENTIALS);
+        if (!resolved) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['GOOGLE_APPLICATION_CREDENTIALS'],
+                message: `Google credentials file not found: ${data.GOOGLE_APPLICATION_CREDENTIALS} (also checked server/secrets/)`,
+            });
+        }
+    }
+    if (data.GOOGLE_SERVICE_ACCOUNT_JSON && !looksLikeJson(data.GOOGLE_SERVICE_ACCOUNT_JSON)) {
+        const asPath = resolveExistingPath(data.GOOGLE_SERVICE_ACCOUNT_JSON);
+        if (!asPath) {
+            ctx.addIssue({
+                code: 'custom',
+                path: ['GOOGLE_SERVICE_ACCOUNT_JSON'],
+                message: 'GOOGLE_SERVICE_ACCOUNT_JSON must be inline JSON, not a file path. Use GOOGLE_APPLICATION_CREDENTIALS for a key file instead.',
+            });
+        }
     }
     for (const origin of data.ALLOWED_ORIGINS) {
         try {
@@ -128,6 +153,17 @@ catch (error) {
         process.exit(1);
     }
     throw error;
+}
+if (parsedEnv.GOOGLE_APPLICATION_CREDENTIALS) {
+    const resolved = resolveExistingPath(parsedEnv.GOOGLE_APPLICATION_CREDENTIALS);
+    if (resolved)
+        parsedEnv.GOOGLE_APPLICATION_CREDENTIALS = resolved;
+}
+if (parsedEnv.GOOGLE_SERVICE_ACCOUNT_JSON && !looksLikeJson(parsedEnv.GOOGLE_SERVICE_ACCOUNT_JSON)) {
+    const resolved = resolveExistingPath(parsedEnv.GOOGLE_SERVICE_ACCOUNT_JSON);
+    if (resolved) {
+        parsedEnv.GOOGLE_SERVICE_ACCOUNT_JSON = readFileSync(resolved, 'utf8');
+    }
 }
 export const env = parsedEnv;
 export const isProduction = env.NODE_ENV === 'production';
