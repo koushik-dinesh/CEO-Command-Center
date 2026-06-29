@@ -4,7 +4,6 @@ import ExecutiveTrendArea from '../components/command-center/ExecutiveTrendArea'
 import FetchingActivityPanel from '../components/command-center/FetchingActivityPanel';
 import { HomepageControls, ExecutiveInsightsPanel } from '../components/command-center/Controls';
 import { useCommandCenterContext } from '../context/CommandCenterContext';
-import { logCopqSourceDebug } from '../debug/copqSourceDebug';
 
 type ToastState = { message: string; kind: 'success' | 'info' };
 
@@ -17,10 +16,6 @@ export default function CommandCenterPage() {
     const timeout = window.setTimeout(() => setToast(null), 4000);
     return () => window.clearTimeout(timeout);
   }, [toast]);
-
-  useEffect(() => {
-    if (data) logCopqSourceDebug(data);
-  }, [data]);
 
   async function handleRefresh() {
     try {
@@ -69,10 +64,10 @@ export default function CommandCenterPage() {
 
       {data ? (
         <div className="space-y-6">
-          <FetchingActivityPanel activity={data.fetchActivity} isRefreshing={isRefreshing} />
           <HeroKpiGrid kpis={data.kpis} snapshotKey={data.snapshotKey} />
           <ExecutiveInsightsPanel insights={data.insights} />
           <ExecutiveTrendArea data={data} />
+          <FetchingActivityPanel syncHistory={data.syncHistory} isRefreshing={isRefreshing} />
         </div>
       ) : null}
     </>

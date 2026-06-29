@@ -1,23 +1,33 @@
 import { Link } from 'react-router-dom';
-import { useSearchParams } from 'react-router-dom';
 import { navHref } from '../../config/navigation';
 
-interface DrilldownBackLinkProps {
-  to?: string;
-  label?: string;
+interface NavBackButtonProps {
+  to: string;
+  label: string;
+  snapshotKey?: string;
 }
 
-export default function DrilldownBackLink({
-  to = '/',
-  label = 'Back to Command Center',
-}: DrilldownBackLinkProps) {
-  const [searchParams] = useSearchParams();
-  const snapshotKey = searchParams.get('snapshot') ?? undefined;
-
+export default function NavBackButton({
+  to,
+  label,
+  snapshotKey,
+}: NavBackButtonProps) {
   return (
-    <Link to={navHref(to, snapshotKey)} className="cc-back-link mb-4 inline-flex items-center gap-1.5">
-      <span aria-hidden="true">←</span>
-      {label}
+    <Link
+      to={navHref(to, snapshotKey)}
+      className="exec-nav-back-btn"
+      title={label}
+      aria-label={label}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path
+          d="M10 3.5 5.5 8 10 12.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
     </Link>
   );
 }

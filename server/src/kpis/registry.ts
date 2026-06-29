@@ -10,3 +10,7 @@ export function getCalculator(code: string): KpiCalculator | undefined {
 export function listCalculators(): KpiCalculator[] {
   return [...registry.values()];
 }
+
+export function allKpiCodes(): KpiCode[] {
+  return [...registry.keys()];
+}

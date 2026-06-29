@@ -214,22 +214,32 @@ export interface CommandCenterResponse {
     warehouses: string[];
   };
   syncedAt: string;
-  fetchActivity: FetchActivitySnapshot;
+  syncHistory: SyncHistorySnapshot;
   /** Temporary COPQ source inspection payload — remove after validation. */
   copqSourceDebug?: import('./copqSourceDebug.js').CopqSourceDebugPayload;
 }
 
-export interface FetchActivityEntry {
-  provider: 'GOOGLE_DRIVE' | 'GOOGLE_SHEETS';
-  operation: string;
-  sourceCode?: string;
+export interface SyncHistoryFile {
+  name: string;
+  status: 'success' | 'failed';
   fetchedAt: string;
+  error?: string;
 }
 
-export interface FetchActivitySnapshot {
-  driveLastFetchedAt: string | null;
-  sheetsLastFetchedAt: string | null;
-  entries: FetchActivityEntry[];
+export interface SyncHistorySession {
+  id: string;
+  source: 'DRIVE' | 'SHEETS';
+  syncType: 'MANUAL' | 'AUTOMATIC';
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
+  startedAt: string;
+  completedAt: string;
+  totalFilesProcessed: number;
+  durationMs: number;
+  files: SyncHistoryFile[];
+}
+
+export interface SyncHistorySnapshot {
+  sessions: SyncHistorySession[];
 }
 
 export interface DrilldownSummary {

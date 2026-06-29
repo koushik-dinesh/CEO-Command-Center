@@ -3,6 +3,7 @@ import { REQUIRED_SNAPSHOT_REPORT_COUNT } from '../snapshots/snapshotCompletenes
 import { formatSnapshotDateFromDb, normalizeSnapshotDate, parseDateFromSnapshotKey } from '../snapshots/snapshotDate.js';
 import { parseJsonField, stringifyJson } from '../db/json.js';
 import { execute, queryOne, queryRows } from '../db/mysql.js';
+
 interface SnapshotMetricsDbRow extends RowDataPacket {
   snapshotKey: string;
   snapshotDate: string;
@@ -91,6 +92,16 @@ export class SnapshotMetricsRepository {
     return row ? mapRow(row) : null;
   }
 
+  static async findLatestComplete(): Promise<SnapshotMetricsRow | null> {
+    const row = await queryOne<SnapshotMetricsDbRow>(
+      `SELECT * FROM snapshot_metrics
+       WHERE reportCount >= ${REQUIRED_SNAPSHOT_REPORT_COUNT}
+       ORDER BY snapshotTimestamp DESC
+       LIMIT 1`,
+    );
+    return row ? mapRow(row) : null;
+  }
+
   static async upsert(data: {
     snapshotKey: string;
     snapshotDate: string;
@@ -171,6 +182,29 @@ export class SnapshotMetricsRepository {
     return rows.map(mapRow);
   }
 
+  /** Latest complete snapshot per calendar day — replaces analytics_daily_snapshots. */
+  static async listDailyRevenueHistory(limit = 8): Promise<Array<{ calculatedAt: string; value: string }>> {
+    const rows = await queryRows<SnapshotMetricsDbRow>(
+      `SELECT sm.snapshotTimestamp, sm.revenue
+       FROM snapshot_metrics sm
+       INNER JOIN (
+         SELECT snapshotDate, MAX(snapshotTimestamp) AS maxTimestamp
+         FROM snapshot_metrics
+         WHERE reportCount >= ${REQUIRED_SNAPSHOT_REPORT_COUNT} AND revenue IS NOT NULL
+         GROUP BY snapshotDate
+       ) latest ON sm.snapshotDate = latest.snapshotDate AND sm.snapshotTimestamp = latest.maxTimestamp
+       WHERE sm.reportCount >= ${REQUIRED_SNAPSHOT_REPORT_COUNT}
+       ORDER BY sm.snapshotDate ASC
+       LIMIT ?`,
+      [limit],
+    );
+
+    return rows.map((row) => ({
+      calculatedAt: row.snapshotTimestamp.toISOString(),
+      value: String(row.revenue ?? 0),
+    }));
+  }
+
   static async deleteByKey(snapshotKey: string): Promise<void> {
     await execute('DELETE FROM snapshot_metrics WHERE snapshotKey = ?', [snapshotKey]);
   }
@@ -178,6 +212,15 @@ export class SnapshotMetricsRepository {
   static async deleteIncomplete(): Promise<number> {
     const result = await execute(
       `DELETE FROM snapshot_metrics WHERE reportCount < ${REQUIRED_SNAPSHOT_REPORT_COUNT}`,
+    );
+    return result.affectedRows ?? 0;
+  }
+
+  static async deleteOlderThan(retentionDays: number): Promise<number> {
+    const result = await execute(
+      `DELETE FROM snapshot_metrics
+       WHERE snapshotDate < DATE_SUB(UTC_DATE(), INTERVAL ? DAY)`,
+      [retentionDays],
     );
     return result.affectedRows ?? 0;
   }

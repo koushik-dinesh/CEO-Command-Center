@@ -40,9 +40,9 @@ const dataSources = [
     name: 'NC Register Dashboard Sheet',
     sourceType: SourceType.GOOGLE_SHEET,
     provider: SourceProvider.GOOGLE_SHEETS,
-    locationRef: '1CBrM7pIT10Egk-D9rD5d43Ry7AxxFP7LXJapGUu6Vvg',
+    locationRef: '1V28mVxJtrqlzvaUTZAogAiI1PjKF4SjdJIGZotaC5vk',
     configJson: {
-      dashboardSheetName: 'Dashboard',
+      dashboardSheetName: 'Overall Dashboard',
       totalCopqCell: 'O34',
       totalCopqLabelCell: 'O31',
       copqCell: 'T13',
@@ -128,26 +128,6 @@ async function main() {
 
   await execute(
     `UPDATE kpi_definitions SET isActive = FALSE, updatedAt = UTC_TIMESTAMP(3) WHERE code = 'INVENTORY_TURNOVER_RATIO'`,
-  );
-
-  for (const kpi of kpis) {
-    const kpiDefinitionId = await findIdByCode('kpi_definitions', kpi.code);
-    for (const sourceCode of kpi.sources) {
-      const dataSourceId = await findIdByCode('data_sources', sourceCode);
-      await execute(
-        `INSERT INTO kpi_dependencies (id, kpiDefinitionId, dataSourceId, isRequired)
-         VALUES (?, ?, ?, TRUE)
-         ON DUPLICATE KEY UPDATE isRequired = TRUE`,
-        [createId('dep'), kpiDefinitionId, dataSourceId],
-      );
-    }
-  }
-
-  await execute(
-    `DELETE dep FROM kpi_dependencies dep
-     INNER JOIN kpi_definitions kpi ON kpi.id = dep.kpiDefinitionId
-     INNER JOIN data_sources ds ON ds.id = dep.dataSourceId
-     WHERE kpi.code = 'COPQ' AND ds.code = 'NC_REGISTER_CSV'`,
   );
 
   const layoutJson = { cards: kpis.map((kpi) => ({ code: kpi.code, width: 'third' })) };

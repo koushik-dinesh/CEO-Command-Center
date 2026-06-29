@@ -1,11 +1,11 @@
 import type { RowDataPacket } from 'mysql2';
-import type { DataSourceRow } from '../db/types.js';
 import { parseJsonField } from '../db/json.js';
 import { queryOne } from '../db/mysql.js';
-import { getLatestCopqStagingRecord } from '../copq/copqStagingQueries.js';
-import { GoogleSheetsService } from '../ingestion/googleSheetsService.js';
-import { sheetValuesToRows } from '../ingestion/csvParser.js';
-import { normalizeRows } from '../ingestion/sourceAdapters.js';
+import { CopqAnalyticsService } from '../copq/CopqAnalyticsService.js';
+import { CopqAnalyticsMetaRepository } from '../repositories/CopqAnalyticsMetaRepository.js';
+import { KpiRepository } from '../repositories/KpiRepository.js';
+import { NcCopqFactRepository } from '../repositories/NcCopqFactRepository.js';
+import type { NcCopqAnalyticsRecord } from '../copq/ncRecords.js';
 import { toDecimal } from '../utils/numbers.js';
 import type { KpiMetric } from './types.js';
 
@@ -65,13 +65,13 @@ export interface CopqSourceDebugPayload {
       calculatedAt: string | null;
       metadataJson: unknown;
     } | null;
-    latestStaging: {
-      createdAt: string | null;
-      sourceKey: string | null;
-      normalized: Record<string, unknown>;
-      rawType: string | null;
+    copqAnalyticsMeta: {
+      syncedAt: string | null;
+      recordCount: number;
+      headlineJson: Record<string, unknown> | null;
     } | null;
   };
+  /** Retained for API compatibility; dashboard debug uses staged data only (no live Google fetch). */
   liveFetch: {
     attempted: boolean;
     success: boolean;
@@ -90,13 +90,6 @@ interface DataSourceDbRow extends RowDataPacket {
   name: string;
   locationRef: string;
   configJson: unknown;
-}
-
-interface KpiValueDbRow extends RowDataPacket {
-  valueDecimal: string | null;
-  previousValueDecimal: string | null;
-  calculatedAt: Date;
-  metadataJson: unknown;
 }
 
 function parseCell(cell: {
@@ -149,6 +142,32 @@ function mappingFromCell(label: string, sheet: string, cell: CopqSourceDebugCell
   };
 }
 
+function buildNcFactPreviewDataset(
+  factPreview: NcCopqAnalyticsRecord[],
+  factCount: number,
+  normalized: Record<string, unknown>,
+  ncSheet: string,
+  fileName: string,
+): CopqSourceDebugDataset {
+  return {
+    sourceName: 'NC Register rows (analytics facts)',
+    fileName,
+    sheetName: String(normalized.ncRecordsSheetName ?? ncSheet),
+    range: null,
+    headers: ['QC NC number', 'NC DATE', 'Product name', 'QC Location', 'Root Cause', 'FINAL COPQ', 'Status'],
+    rowsPreview: factPreview.map((row) => [
+      row.ncNumber,
+      row.displayDate,
+      row.product,
+      row.department,
+      row.rootCause,
+      row.finalCopq,
+      row.status,
+    ]),
+    rowCount: factCount,
+  };
+}
+
 function mappingFromNormalized(
   label: string,
   sheet: string,
@@ -168,28 +187,22 @@ function mappingFromNormalized(
 }
 
 export async function buildCopqSourceDebug(finalKpiCard: KpiMetric | null): Promise<CopqSourceDebugPayload> {
-  const dataSource = await queryOne<DataSourceDbRow>(
-    `SELECT code, name, locationRef, configJson
+  const dataSource = await queryOne<DataSourceDbRow & { id: string }>(
+    `SELECT id, code, name, locationRef, configJson
      FROM data_sources
      WHERE code = 'COPQ_DASHBOARD_SHEET'
      LIMIT 1`,
   );
 
-  const staging = await getLatestCopqStagingRecord();
-
-  const kpiValue = await queryOne<KpiValueDbRow>(
-    `SELECT kv.valueDecimal, kv.previousValueDecimal, kv.calculatedAt, kv.metadataJson
-     FROM kpi_values kv
-     INNER JOIN kpi_definitions kd ON kd.id = kv.kpiDefinitionId
-     WHERE kd.code = 'COPQ'
-     ORDER BY kv.calculatedAt DESC
-     LIMIT 1`,
-  );
+  const kpiLatest = await KpiRepository.latestValueByCode('COPQ');
+  const copqMeta = dataSource
+    ? await CopqAnalyticsMetaRepository.findByDataSourceId(dataSource.id)
+    : null;
 
   const config = dataSource ? parseJsonField(dataSource.configJson) as Record<string, unknown> : {};
-  const normalized = staging?.normalized ? staging.normalized as Record<string, unknown> : {};
-  const raw = staging?.raw ? staging.raw as Record<string, unknown> : {};
-  const metadata = kpiValue?.metadataJson ? parseJsonField(kpiValue.metadataJson) as Record<string, unknown> : {};
+  const normalized = (copqMeta?.headlineJson ?? {}) as Record<string, unknown>;
+  const raw: Record<string, unknown> = {};
+  const metadata = (kpiLatest?.value.metadataJson ?? {}) as Record<string, unknown>;
 
   const datasets: CopqSourceDebugDataset[] = [];
   const dashboardSheet = String(config.dashboardSheetName ?? 'Dashboard');
@@ -207,18 +220,17 @@ export async function buildCopqSourceDebug(finalKpiCard: KpiMetric | null): Prom
     });
   }
 
-  const ncRecords = raw.ncRecords as { sheetName?: string; range?: string; values?: unknown[][] } | undefined;
-  if (ncRecords?.values?.length) {
-    const preview = previewRows(ncRecords.values);
-    datasets.push({
-      sourceName: 'NC Register rows (staged)',
-      fileName: String(raw.workbookName ?? dataSource?.name ?? 'Form Responses'),
-      sheetName: ncRecords.sheetName ?? ncSheet,
-      range: ncRecords.range ?? null,
-      headers: preview.headers,
-      rowsPreview: preview.rowsPreview,
-      rowCount: preview.rowCount,
-    });
+  const sourceContext = await CopqAnalyticsService.loadDataSourceContext();
+  const factCount = sourceContext
+    ? await NcCopqFactRepository.countForDataSource(sourceContext.dataSourceId)
+    : 0;
+  const factPreview = factCount > 0 && sourceContext
+    ? await NcCopqFactRepository.listPreview(sourceContext.dataSourceId, 20)
+    : [];
+  const ncRegisterFileName = String(raw.workbookName ?? dataSource?.name ?? 'Form Responses');
+
+  if (factPreview.length > 0) {
+    datasets.push(buildNcFactPreviewDataset(factPreview, factCount, normalized, ncSheet, ncRegisterFileName));
   }
 
   const o34Cell = dashboardCells.totalCopq ?? null;
@@ -228,106 +240,57 @@ export async function buildCopqSourceDebug(finalKpiCard: KpiMetric | null): Prom
   const liveFetch: CopqSourceDebugPayload['liveFetch'] = {
     attempted: false,
     success: false,
-    error: null,
-    workbookName: null,
-    workbookModifiedTime: null,
-    dashboardCells: null,
-    ncRecords: null,
-    normalizedPreview: null,
+    error: 'Live Google Sheets fetch disabled; use sync/ingestion to refresh staged data',
+    workbookName: typeof raw.workbookName === 'string' ? raw.workbookName : null,
+    workbookModifiedTime: typeof raw.workbookModifiedTime === 'string' ? raw.workbookModifiedTime : null,
+    dashboardCells: Object.keys(dashboardCells).length > 0 ? dashboardCells : null,
+    ncRecords: factPreview.length > 0
+      ? buildNcFactPreviewDataset(factPreview, factCount, normalized, ncSheet, ncRegisterFileName)
+      : null,
+    normalizedPreview: Object.keys(normalized).length > 0
+      ? Object.fromEntries(Object.entries(normalized).map(([key, value]) => [key, value == null ? '' : String(value)]))
+      : null,
   };
 
-  if (dataSource) {
-    liveFetch.attempted = true;
-    try {
-      const sourceRow = {
-        ...dataSource,
-        configJson: parseJsonField(dataSource.configJson),
-        isActive: true,
-      } as DataSourceRow;
-      const payload = await new GoogleSheetsService().fetchRange(sourceRow);
-      const liveRaw = JSON.parse(payload.content) as Record<string, unknown>;
-      const liveCells = readCellMap(liveRaw);
-      const liveNc = liveRaw.ncRecords as { sheetName?: string; range?: string; values?: unknown[][] } | undefined;
-      const livePreview = previewRows(liveNc?.values);
-      const normalizedLive = normalizeRows(
-        sourceRow,
-        sheetValuesToRows(payload.content),
-        { sourceDate: payload.modifiedTime ?? new Date(), sourceFileName: payload.fileName },
-      );
-
-      liveFetch.success = true;
-      liveFetch.workbookName = String(liveRaw.workbookName ?? payload.fileName);
-      liveFetch.workbookModifiedTime = typeof liveRaw.workbookModifiedTime === 'string' ? liveRaw.workbookModifiedTime : null;
-      liveFetch.dashboardCells = liveCells;
-      liveFetch.ncRecords = liveNc?.values?.length ? {
-        sourceName: 'NC Register rows (live)',
-        fileName: String(liveRaw.workbookName ?? payload.fileName),
-        sheetName: liveNc.sheetName ?? ncSheet,
-        range: liveNc.range ?? null,
-        headers: livePreview.headers,
-        rowsPreview: livePreview.rowsPreview,
-        rowCount: livePreview.rowCount,
-      } : null;
-      liveFetch.normalizedPreview = normalizedLive.accepted[0]?.normalized ?? null;
-
-      datasets.push({
-        sourceName: 'NC Register Dashboard (live)',
-        fileName: String(liveRaw.workbookName ?? payload.fileName),
-        sheetName: dashboardSheet,
-        range: typeof liveRaw.range === 'string' ? liveRaw.range : null,
-        ...previewRows([]),
-        cells: liveCells,
-      });
-      if (liveFetch.ncRecords) datasets.push(liveFetch.ncRecords);
-    } catch (error) {
-      liveFetch.error = error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  const effectiveO34 = liveFetch.dashboardCells?.totalCopq ?? o34Cell;
-  const effectiveT13 = liveFetch.dashboardCells?.copqBeforeQaClearance ?? t13Cell;
-  const effectiveT5 = liveFetch.dashboardCells?.qaSavedAmount ?? t5Cell;
-  const effectiveNormalized = liveFetch.normalizedPreview ?? normalized;
-
   const mappings = {
-    copqYtd: effectiveO34
-      ? mappingFromCell('COPQ YTD', dashboardSheet, effectiveO34, 'Dashboard!O34 = Total COPQ')
-      : mappingFromNormalized('COPQ YTD', dashboardSheet, { ...effectiveNormalized, ...metadata }, 'copqYtd', {
+    copqYtd: o34Cell
+      ? mappingFromCell('COPQ YTD', dashboardSheet, o34Cell, 'Dashboard!O34 = Total COPQ')
+      : mappingFromNormalized('COPQ YTD', dashboardSheet, { ...normalized, ...metadata }, 'copqYtd', {
         cell: String(config.totalCopqCell ?? 'O34'),
-        notes: 'Falling back to staged KPI metadata because live/staged O34 cell was unavailable',
+        notes: 'Falling back to staged KPI metadata because staged O34 cell was unavailable',
       }),
-    copqMtd: mappingFromNormalized('COPQ MTD', ncSheet, effectiveNormalized, 'copqMtd', {
+    copqMtd: mappingFromNormalized('COPQ MTD', ncSheet, normalized, 'copqMtd', {
       column: String(config.ncCopqColumn ?? 'FINAL COPQ'),
-      dateColumn: String(effectiveNormalized.ncDateColumnUsed ?? config.ncDateColumn ?? 'NC DATE'),
-      filter: effectiveNormalized.copqMonthStart && effectiveNormalized.copqReferenceDate
-        ? `${effectiveNormalized.copqMonthStart} → ${effectiveNormalized.copqReferenceDate}`
+      dateColumn: String(normalized.ncDateColumnUsed ?? config.ncDateColumn ?? 'NC DATE'),
+      filter: normalized.copqMonthStart && normalized.copqReferenceDate
+        ? `${normalized.copqMonthStart} → ${normalized.copqReferenceDate}`
         : undefined,
-      rowCount: Number(effectiveNormalized.copqMtdRowCount ?? 0) || undefined,
-      sourceKeys: typeof effectiveNormalized.copqMtdSourceKeys === 'string' && effectiveNormalized.copqMtdSourceKeys
-        ? effectiveNormalized.copqMtdSourceKeys.split(',')
+      rowCount: Number(normalized.copqMtdRowCount ?? 0) || undefined,
+      sourceKeys: typeof normalized.copqMtdSourceKeys === 'string' && normalized.copqMtdSourceKeys
+        ? normalized.copqMtdSourceKeys.split(',')
         : undefined,
       notes: 'Sum of FINAL COPQ for NC rows in current month',
     }),
-    copqQtd: mappingFromNormalized('COPQ QTD', ncSheet, effectiveNormalized, 'copqQtd', {
+    copqQtd: mappingFromNormalized('COPQ QTD', ncSheet, normalized, 'copqQtd', {
       column: String(config.ncCopqColumn ?? 'FINAL COPQ'),
-      dateColumn: String(effectiveNormalized.ncDateColumnUsed ?? config.ncDateColumn ?? 'NC DATE'),
-      filter: effectiveNormalized.copqQuarterStart && effectiveNormalized.copqReferenceDate
-        ? `${effectiveNormalized.copqQuarterStart} → ${effectiveNormalized.copqReferenceDate}`
+      dateColumn: String(normalized.ncDateColumnUsed ?? config.ncDateColumn ?? 'NC DATE'),
+      filter: normalized.copqQuarterStart && normalized.copqReferenceDate
+        ? `${normalized.copqQuarterStart} → ${normalized.copqReferenceDate}`
         : undefined,
-      rowCount: Number(effectiveNormalized.copqQtdRowCount ?? 0) || undefined,
-      sourceKeys: typeof effectiveNormalized.copqQtdSourceKeys === 'string' && effectiveNormalized.copqQtdSourceKeys
-        ? effectiveNormalized.copqQtdSourceKeys.split(',')
+      rowCount: Number(normalized.copqQtdRowCount ?? 0) || undefined,
+      sourceKeys: typeof normalized.copqQtdSourceKeys === 'string' && normalized.copqQtdSourceKeys
+        ? normalized.copqQtdSourceKeys.split(',')
         : undefined,
       notes: 'Sum of FINAL COPQ for NC rows in current financial quarter',
     }),
-    qaSaved: effectiveT5
-      ? mappingFromCell('QA Saved', dashboardSheet, effectiveT5, 'Dashboard!T5')
-      : mappingFromNormalized('QA Saved', dashboardSheet, { ...effectiveNormalized, ...metadata }, 'qaSavedAmount', {
+    qaSaved: t5Cell
+      ? mappingFromCell('QA Saved', dashboardSheet, t5Cell, 'Dashboard!T5')
+      : mappingFromNormalized('QA Saved', dashboardSheet, { ...normalized, ...metadata }, 'qaSavedAmount', {
         cell: String(config.qaSavedAmountCell ?? 'T5'),
       }),
-    beforeQaClearance: effectiveT13
-      ? mappingFromCell('Before QA Clearance', dashboardSheet, effectiveT13, 'Dashboard!T13 (supporting metric only)')
-      : mappingFromNormalized('Before QA Clearance', dashboardSheet, { ...effectiveNormalized, ...metadata }, 'copqBeforeQaClearance', {
+    beforeQaClearance: t13Cell
+      ? mappingFromCell('Before QA Clearance', dashboardSheet, t13Cell, 'Dashboard!T13 (supporting metric only)')
+      : mappingFromNormalized('Before QA Clearance', dashboardSheet, { ...normalized, ...metadata }, 'copqBeforeQaClearance', {
         cell: String(config.copqCell ?? 'T13'),
       }),
   };
@@ -343,17 +306,16 @@ export async function buildCopqSourceDebug(finalKpiCard: KpiMetric | null): Prom
     datasets,
     mappings,
     database: {
-      latestKpiValue: kpiValue ? {
-        valueDecimal: kpiValue.valueDecimal,
-        previousValueDecimal: kpiValue.previousValueDecimal,
-        calculatedAt: kpiValue.calculatedAt.toISOString(),
-        metadataJson: parseJsonField(kpiValue.metadataJson),
+      latestKpiValue: kpiLatest ? {
+        valueDecimal: kpiLatest.value.valueDecimal,
+        previousValueDecimal: kpiLatest.value.previousValueDecimal,
+        calculatedAt: kpiLatest.value.calculatedAt.toISOString(),
+        metadataJson: kpiLatest.value.metadataJson,
       } : null,
-      latestStaging: staging ? {
-        createdAt: staging.createdAt.toISOString(),
-        sourceKey: staging.sourceKey,
-        normalized,
-        rawType: typeof raw.type === 'string' ? raw.type : null,
+      copqAnalyticsMeta: copqMeta ? {
+        syncedAt: copqMeta.syncedAt.toISOString(),
+        recordCount: copqMeta.recordCount,
+        headlineJson: copqMeta.headlineJson,
       } : null,
     },
     liveFetch,

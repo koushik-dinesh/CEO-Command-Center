@@ -1,18 +1,11 @@
-import type { RowDataPacket } from 'mysql2';
-import { parseJsonField } from '../db/json.js';
-import { queryOne } from '../db/mysql.js';
 import {
   calendarMonthStart,
-  calculateCopqPeriodTotals,
   financialQuarterStartDate,
 } from './copqPeriods.js';
 import { financialYearStartDate } from '../command-center/inventoryDays.js';
-import { getLatestCopqStagingRecord } from './copqStagingQueries.js';
-import { parseNcCopqRecords, type NcCopqAnalyticsRecord } from './ncRecords.js';
-
-interface DataSourceDbRow extends RowDataPacket {
-  configJson: unknown;
-}
+import { CopqAnalyticsService } from './CopqAnalyticsService.js';
+import { loadCopqDataSourceContext } from './copqNcParseConfig.js';
+import { type NcCopqAnalyticsRecord } from './ncRecords.js';
 
 export interface CopqCategoryBreakdownRow {
   category: string;
@@ -242,57 +235,33 @@ export function buildCopqDrilldownAnalytics(
   };
 }
 
-export async function loadNcAnalyticsContext(metadata: unknown): Promise<NcAnalyticsContext | null> {
-  const staging = await getLatestCopqStagingRecord();
-  if (!staging) return null;
+async function loadNcAnalyticsContextFromFacts(
+  metadata: unknown,
+  dataSourceId: string,
+): Promise<NcAnalyticsContext | null> {
+  const loaded = await CopqAnalyticsService.loadFactsIfAvailable(dataSourceId);
+  if (!loaded?.meta) return null;
 
-  const normalized = asRecord(staging.normalized);
-  const raw = asRecord(staging.raw);
-  const ncRecords = raw.ncRecords as { sheetName?: string; values?: unknown[][] } | undefined;
-  if (!ncRecords?.values?.length) return null;
-
-  const dataSource = await queryOne<DataSourceDbRow>(
-    `SELECT configJson FROM data_sources WHERE code = 'COPQ_DASHBOARD_SHEET' LIMIT 1`,
-  );
-  const config = dataSource ? asRecord(parseJsonField(dataSource.configJson)) : {};
   const referenceDate = metadataString(metadata, 'copqReferenceDate')
-    ?? metadataString(normalized, 'copqReferenceDate')
-    ?? new Date().toISOString().slice(0, 10);
-
-  const parsed = parseNcCopqRecords(ncRecords.values, {
-    copqColumn: String(config.ncCopqColumn ?? 'FINAL COPQ'),
-    dateColumn: String(config.ncDateColumn ?? 'NC DATE'),
-    dateColumnFallbacks: Array.isArray(config.ncDateColumnFallbacks)
-      ? config.ncDateColumnFallbacks.map(String)
-      : ['Timestamp', 'Date'],
-    sourceKeyColumn: String(config.ncSourceKeyColumn ?? 'QC NC number'),
-    ncNumberColumn: String(config.ncNumberColumn ?? 'QC NC number'),
-    productColumn: String(config.productColumn ?? 'Product name'),
-    departmentColumn: String(config.departmentColumn ?? 'QC Location'),
-    rootCauseColumn: String(config.rootCauseColumn ?? 'Reason For Rejection'),
-    rootCauseFallbackColumn: String(config.rootCauseFallbackColumn ?? 'Complaint name'),
-    categoryColumn: String(config.categoryColumn ?? 'Issue Related to'),
-    statusColumn: String(config.statusColumn ?? 'Status'),
-    beforeQaCopqColumn: String(config.beforeQaCopqColumn ?? 'QC COPQ'),
-  });
-
-  const totals = calculateCopqPeriodTotals(parsed.records, referenceDate);
-  const financialYearStart = totals?.financialYearStart
-    ?? financialYearStartDate(referenceDate)
-    ?? referenceDate.slice(0, 10);
+    ?? loaded.meta.referenceDate;
 
   return {
-    records: parsed.records,
+    records: loaded.records,
     referenceDate: referenceDate.slice(0, 10),
-    financialYearStart,
-    monthStart: totals?.monthStart ?? calendarMonthStart(referenceDate) ?? referenceDate.slice(0, 10),
-    quarterStart: totals?.quarterStart ?? financialQuarterStartDate(referenceDate) ?? referenceDate.slice(0, 10),
-    sheetName: metadataString(metadata, 'ncRecordsSheetName')
-      ?? ncRecords.sheetName
-      ?? String(config.ncRecordsSheetName ?? 'Form Responses 1'),
-    sourceWorkbook: metadataString(metadata, 'sourceWorkbookName')
-      ?? metadataString(normalized, 'sourceWorkbookName'),
-    lastUpdated: metadataString(metadata, 'sourceLastUpdatedAt')
-      ?? metadataString(normalized, 'sourceLastUpdatedAt'),
+    financialYearStart: loaded.meta.financialYearStart,
+    monthStart: loaded.meta.monthStart,
+    quarterStart: loaded.meta.quarterStart,
+    sheetName: loaded.meta.sheetName
+      ?? metadataString(metadata, 'ncRecordsSheetName'),
+    sourceWorkbook: loaded.meta.sourceWorkbook
+      ?? metadataString(metadata, 'sourceWorkbookName'),
+    lastUpdated: loaded.meta.lastUpdated
+      ?? metadataString(metadata, 'sourceLastUpdatedAt'),
   };
+}
+
+export async function loadNcAnalyticsContext(metadata: unknown): Promise<NcAnalyticsContext | null> {
+  const sourceContext = await loadCopqDataSourceContext();
+  if (!sourceContext) return null;
+  return loadNcAnalyticsContextFromFacts(metadata, sourceContext.dataSourceId);
 }

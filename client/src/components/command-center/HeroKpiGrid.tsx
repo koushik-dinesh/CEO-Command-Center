@@ -16,7 +16,6 @@ import {
 import PrecisionValue from '../ui/PrecisionValue';
 import { MiniSparkline } from './Charts';
 import KpiSubMetrics from './KpiSubMetrics';
-import { traceCopqKpiCardProps } from '../../debug/o34PipelineTrace';
 
 const KPI_ROUTES: Record<string, string> = {
   revenue: '/intelligence/revenue',
@@ -52,19 +51,29 @@ function sparklineUnit(kpi: KpiMetric): 'currency' | 'percent' | 'days' | 'ratio
   return 'currency';
 }
 
+function KpiDrillIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+      <path
+        d="M4.25 9.75 9.75 4.25M5.5 4.25h4.25V8.5"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export default function HeroKpiGrid({ kpis, snapshotKey }: { kpis: KpiMetric[]; snapshotKey: string }) {
   return (
     <section className="cc-kpi-grid">
       {kpis.map((kpi) => {
-        if (kpi.key === 'copq') {
-          traceCopqKpiCardProps(kpi);
-        }
         const drillPath = kpi.drilldownPath ?? KPI_ROUTES[kpi.key] ?? '/';
         const href = navHref(drillPath, snapshotKey);
         const valueKind = kpi.unit === 'percent' ? 'percent' : 'currency';
         const display = kpiDisplayValue(kpi);
         const previousDisplay = kpiExactPrevious(kpi);
-        const drillLabel = 'View intelligence →';
         const visualSentiment = resolveKpiVisualSentiment(kpi);
         const statusTooltip = kpi.statusTooltip ?? undefined;
 
@@ -122,7 +131,9 @@ export default function HeroKpiGrid({ kpis, snapshotKey }: { kpis: KpiMetric[]; 
               unit={sparklineUnit(kpi)}
               chartSentiment={visualSentiment}
             />
-            <p className="cc-kpi-drill">{drillLabel}</p>
+            <span className="cc-kpi-drill-btn" title="View Intelligence">
+              <KpiDrillIcon />
+            </span>
           </Link>
         );
       })}

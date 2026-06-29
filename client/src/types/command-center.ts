@@ -60,17 +60,27 @@ export interface SnapshotBatch {
   completeness: number;
 }
 
-export interface FetchActivityEntry {
-  provider: 'GOOGLE_DRIVE' | 'GOOGLE_SHEETS';
-  operation: string;
-  sourceCode?: string;
+export interface SyncHistoryFile {
+  name: string;
+  status: 'success' | 'failed';
   fetchedAt: string;
+  error?: string;
 }
 
-export interface FetchActivitySnapshot {
-  driveLastFetchedAt: string | null;
-  sheetsLastFetchedAt: string | null;
-  entries: FetchActivityEntry[];
+export interface SyncHistorySession {
+  id: string;
+  source: 'DRIVE' | 'SHEETS';
+  syncType: 'MANUAL' | 'AUTOMATIC';
+  status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
+  startedAt: string;
+  completedAt: string;
+  totalFilesProcessed: number;
+  durationMs: number;
+  files: SyncHistoryFile[];
+}
+
+export interface SyncHistorySnapshot {
+  sessions: SyncHistorySession[];
 }
 
 export interface DrilldownSummary {
@@ -302,7 +312,7 @@ export interface CommandCenterResponse {
     warehouses: string[];
   };
   syncedAt: string;
-  fetchActivity: FetchActivitySnapshot;
+  syncHistory: SyncHistorySnapshot;
   productivity: ProductivityIntelligence;
   /** Temporary COPQ source inspection payload — remove after validation. */
   copqSourceDebug?: CopqSourceDebugPayload;
@@ -364,11 +374,10 @@ export interface CopqSourceDebugPayload {
       calculatedAt: string | null;
       metadataJson: unknown;
     } | null;
-    latestStaging: {
-      createdAt: string | null;
-      sourceKey: string | null;
-      normalized: Record<string, unknown>;
-      rawType: string | null;
+    copqAnalyticsMeta: {
+      syncedAt: string | null;
+      recordCount: number;
+      headlineJson: Record<string, unknown> | null;
     } | null;
   };
   liveFetch: {

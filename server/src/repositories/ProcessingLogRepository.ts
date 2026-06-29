@@ -64,6 +64,15 @@ export class ProcessingLogRepository {
     return updated;
   }
 
+  static async pruneOlderThan(retentionDays: number): Promise<number> {
+    if (retentionDays <= 0) return 0;
+    const result = await execute(
+      'DELETE FROM processing_logs WHERE startedAt < DATE_SUB(UTC_TIMESTAMP(3), INTERVAL ? DAY)',
+      [retentionDays],
+    );
+    return Number(result.affectedRows ?? 0);
+  }
+
   static async latest(limit = 8) {
     const rows = await queryRows<LatestProcessingLogDbRow>(
       `SELECT pl.*, ds.name AS dataSourceName

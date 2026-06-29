@@ -209,4 +209,27 @@ export class ReportSnapshotRepository {
     const row = await queryOne<RowDataPacket & { total: number }>('SELECT COUNT(*) AS total FROM report_snapshots');
     return row?.total ?? 0;
   }
+
+  static async pruneOlderThan(retentionDays: number): Promise<{ snapshots: number; metrics: number }> {
+    const cutoffSql = 'DATE_SUB(UTC_DATE(), INTERVAL ? DAY)';
+    const snapshotResult = await execute(
+      `DELETE FROM report_snapshots
+       WHERE snapshotDate < ${cutoffSql}`,
+      [retentionDays],
+    );
+    const metricsResult = await execute(
+      `DELETE FROM snapshot_metrics
+       WHERE snapshotDate < ${cutoffSql}`,
+      [retentionDays],
+    );
+    const registryResult = await execute(
+      `DELETE FROM snapshot_file_registry
+       WHERE snapshotDate < ${cutoffSql}`,
+      [retentionDays],
+    );
+    return {
+      snapshots: (snapshotResult.affectedRows ?? 0) + (registryResult.affectedRows ?? 0),
+      metrics: metricsResult.affectedRows ?? 0,
+    };
+  }
 }

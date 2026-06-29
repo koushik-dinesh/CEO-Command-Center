@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
-import DrilldownBackLink from '../components/navigation/DrilldownBackLink';
 import { navHref } from '../config/navigation';
 import type { RevenueDrilldownResponse, RevenueSalespersonRow } from '../types';
 import { formatDate, formatDateTime, formatKpiValue } from '../utils/formatters';
@@ -275,11 +274,7 @@ export default function RevenueDrilldownPage() {
   return (
     <>
       <div className="dashboard-panel mb-8 p-5">
-        <DrilldownBackLink
-          to="/intelligence/revenue"
-          label="Back to Revenue Intelligence"
-        />
-        <div className="mt-4 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
             <p className="eyebrow text-sm font-semibold uppercase tracking-[0.25em]">Revenue Drill-Down</p>
             <h2 className="mt-2 text-xl font-semibold text-primary-theme">Salesperson Revenue Breakdown</h2>

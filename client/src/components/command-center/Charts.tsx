@@ -178,15 +178,6 @@ export function TrendAreaChart({
     [dataKey]: point.value,
   }));
 
-  if (import.meta.env.DEV && debugLabel) {
-    console.log(`[chart:${debugLabel}] rendered chart points:`, chartData.length);
-    console.log(`[chart:${debugLabel}] chart data (1:1 with API trend):`, chartData.map((row) => ({
-      snapshotDate: row.snapshotDate,
-      snapshotKey: row.snapshotKey,
-      value: row.value,
-    })));
-  }
-
   const xDataKey = snapshotXAxis ? 'snapshotKey' : 'snapshotDateLabel';
   const labelByKey = new Map(chartData.map((row) => [row.snapshotKey, row.snapshotDateLabel]));
 

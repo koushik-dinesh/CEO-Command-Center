@@ -119,4 +119,13 @@ export class SnapshotSyncRunRepository {
     );
     return (row?.found ?? 0) > 0;
   }
+
+  static async pruneOlderThan(retentionDays: number): Promise<number> {
+    if (retentionDays <= 0) return 0;
+    const result = await execute(
+      'DELETE FROM snapshot_sync_runs WHERE startedAt < DATE_SUB(UTC_TIMESTAMP(3), INTERVAL ? DAY)',
+      [retentionDays],
+    );
+    return Number(result.affectedRows ?? 0);
+  }
 }

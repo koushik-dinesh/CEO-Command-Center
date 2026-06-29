@@ -75,6 +75,47 @@ export function formatTime(value: string | Date | null | undefined): string {
   }).format(parsed);
 }
 
+function dateKeyInIst(value: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    timeZone: IST_TIMEZONE,
+  }).format(value);
+}
+
+export function formatSyncSessionTime(value: string | Date | null | undefined): string {
+  const parsed = parseDateInput(value);
+  if (!parsed) return '—';
+
+  const now = new Date();
+  const time = formatTime(parsed);
+  const parsedKey = dateKeyInIst(parsed);
+  const todayKey = dateKeyInIst(now);
+
+  if (parsedKey === todayKey) return `Today • ${time}`;
+
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (parsedKey === dateKeyInIst(yesterday)) return `Yesterday • ${time}`;
+
+  const dateLabel = new Intl.DateTimeFormat('en-IN', {
+    month: 'short',
+    day: 'numeric',
+    year:
+      new Intl.DateTimeFormat('en-IN', { year: 'numeric', timeZone: IST_TIMEZONE }).format(parsed)
+      !== new Intl.DateTimeFormat('en-IN', { year: 'numeric', timeZone: IST_TIMEZONE }).format(now)
+        ? 'numeric'
+        : undefined,
+    timeZone: IST_TIMEZONE,
+  }).format(parsed);
+
+  return `${dateLabel} • ${time}`;
+}
+
+export function formatSyncTypeLabel(syncType: 'MANUAL' | 'AUTOMATIC'): string {
+  return syncType === 'MANUAL' ? 'Manual Sync' : 'Automatic Sync';
+}
+
 export function formatSnapshotLabel(snapshotKey: string): string {
   const parsed = parseSnapshotKey(snapshotKey);
   if (!parsed) return snapshotKey;

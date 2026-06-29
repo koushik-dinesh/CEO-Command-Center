@@ -1,7 +1,9 @@
 import { ReportSnapshotRepository } from '../repositories/ReportSnapshotRepository.js';
 import { SnapshotSyncRunRepository, type SnapshotSyncRunType } from '../repositories/SnapshotSyncRunRepository.js';
 import { SnapshotEngine, type SnapshotSyncResult } from '../reports/SnapshotEngine.js';
-import { IngestionService } from '../ingestion/IngestionService.js';
+import { UnifiedSyncService } from '../sync/UnifiedSyncService.js';
+import { persistSyncSession } from '../ingestion/syncHistoryService.js';
+import { recalcSnapshotDerivedKpis } from '../kpis/snapshotDerivedKpis.js';
 import { todayDateKey } from './snapshotSchedule.js';
 
 export interface SnapshotDiscoveryResult extends SnapshotSyncResult {
@@ -27,7 +29,7 @@ export interface SnapshotSyncStatusResponse {
 
 export class SnapshotDiscoveryService {
   private snapshotEngine = new SnapshotEngine();
-  private ingestionService = new IngestionService();
+  private unifiedSyncService = new UnifiedSyncService();
   private static activeRunId: string | null = null;
 
   start(runType: SnapshotSyncRunType): Promise<{ runId: string }> {
@@ -94,6 +96,7 @@ export class SnapshotDiscoveryService {
           errors: metadata?.errors ?? [],
           processedSnapshotDates: [],
           processedSnapshotKeys: [],
+          files: [],
           todaySnapshotFound: run.todaySnapshotFound,
           newFilesDetected: run.newFilesDetected,
         };
@@ -111,17 +114,24 @@ export class SnapshotDiscoveryService {
       errors: [],
       processedSnapshotDates: [],
       processedSnapshotKeys: [],
+      files: [],
     };
+    let sourceResults: Array<{ sourceCode: string; status: string }> = [];
 
     try {
       if (runType === 'MANUAL') {
-        const ingestion = await this.ingestionService.runAll('manual', {
+        const ingestion = await this.unifiedSyncService.run({
+          syncType: 'MANUAL',
           forceSnapshotRefresh: true,
           alwaysRecalculateKpis: true,
         });
         syncResult = ingestion.snapshotResult;
+        sourceResults = ingestion.sourceResults;
       } else {
         syncResult = await this.snapshotEngine.syncFromDrive();
+        if (syncResult.processed > 0) {
+          await recalcSnapshotDerivedKpis();
+        }
       }
       const today = todayDateKey();
       const todaySnapshotFound = await ReportSnapshotRepository.hasSnapshotForDate(today);
@@ -131,6 +141,7 @@ export class SnapshotDiscoveryService {
         : newFilesDetected > 0
           ? 'SUCCESS'
           : 'NO_NEW_FILES';
+      const completedAt = new Date();
 
       await SnapshotSyncRunRepository.complete(runId, {
         status,
@@ -145,14 +156,25 @@ export class SnapshotDiscoveryService {
           processedSnapshotDates: syncResult.processedSnapshotDates,
           processedSnapshotKeys: syncResult.processedSnapshotKeys,
         },
-        finishedAt: new Date(),
+        finishedAt: completedAt,
       });
+
+      if (runType !== 'MANUAL') {
+        await persistSyncSession({
+          syncType: 'AUTOMATIC',
+          startedAt,
+          completedAt,
+          sourceResults,
+          snapshotResult: syncResult,
+        });
+      }
 
       console.info(
         `[snapshot-discovery:${runType}] runId=${runId} scanned=${syncResult.scanned} processed=${syncResult.processed} skipped=${syncResult.skipped} todayFound=${todaySnapshotFound}`,
       );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Snapshot sync failed';
+      const completedAt = new Date();
       await SnapshotSyncRunRepository.complete(runId, {
         status: 'FAILED',
         scanned: syncResult.scanned,
@@ -162,8 +184,21 @@ export class SnapshotDiscoveryService {
         todaySnapshotFound: false,
         errorMessage,
         metadataJson: syncResult.errors.length > 0 ? { errors: syncResult.errors.slice(0, 10) } : undefined,
-        finishedAt: new Date(),
+        finishedAt: completedAt,
       });
+
+      if (runType !== 'MANUAL') {
+        await persistSyncSession({
+          syncType: 'AUTOMATIC',
+          startedAt,
+          completedAt,
+          status: 'FAILED',
+          sourceResults,
+          snapshotResult: syncResult,
+          errorMessage,
+        });
+      }
+
       console.error(`[snapshot-discovery:${runType}] runId=${runId} failed after ${Date.now() - startedAt.getTime()}ms`, error);
     }
   }

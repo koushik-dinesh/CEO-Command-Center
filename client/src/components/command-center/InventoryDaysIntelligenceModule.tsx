@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { CommandCenterResponse } from '../../types/command-center';
 import PrecisionValue from '../ui/PrecisionValue';
 import { TrendAreaChart } from './Charts';
@@ -88,18 +88,6 @@ function DataSourcesPanel({ sources, methodology }: { sources: InventoryDaysData
 
 export default function InventoryDaysIntelligenceModule({ inventoryDays }: { inventoryDays: InventoryDaysData }) {
   const { summary, formula, trend, insights } = inventoryDays;
-
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    console.log('[inventory-days-chart] API trend length:', trend.length);
-    console.log('[inventory-days-chart] API trend payload:', trend.map((point) => ({
-      snapshotDate: point.snapshotDate,
-      snapshotKey: point.snapshotKey,
-      value: point.value,
-    })));
-    console.log('[inventory-days-chart] API trend first 5:', trend.slice(0, 5));
-    console.log('[inventory-days-chart] API trend last 5:', trend.slice(-5));
-  }, [trend]);
 
   return (
     <div className="space-y-6">

@@ -5,7 +5,7 @@ interface IconProps {
 export function SyncIcon({ className, spinning = false }: IconProps & { spinning?: boolean }) {
   return (
     <svg
-      className={`${className ?? ''} ${spinning ? 'exec-drawer-icon-spin' : ''}`.trim()}
+      className={`${className ?? ''} ${spinning ? 'exec-settings-icon-spin' : ''}`.trim()}
       width="20"
       height="20"
       viewBox="0 0 24 24"

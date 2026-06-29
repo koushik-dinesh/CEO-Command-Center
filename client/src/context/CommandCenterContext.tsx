@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import type { CommandCenterResponse } from '../types/command-center';
-import { traceCopqMetricFromResponse } from '../debug/o34PipelineTrace';
 
 interface CommandCenterContextValue {
   data: CommandCenterResponse | null;
@@ -51,11 +50,6 @@ export function CommandCenterProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const response = await api.commandCenterDashboard(nextSnapshot ?? snapshotKey);
-      traceCopqMetricFromResponse(response.kpis);
-      console.log('API O34', {
-        copqKpi: response.kpis.find((kpi) => kpi.key === 'copq') ?? null,
-        copqSourceDebugKeys: response.copqSourceDebug ? Object.keys(response.copqSourceDebug) : [],
-      });
       setData(response);
       return response;
     } catch (err) {

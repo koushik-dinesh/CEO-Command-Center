@@ -1,8 +1,7 @@
-import { Decimal } from 'decimal.js';
 import type { ReportSnapshotRow } from '../repositories/ReportSnapshotRepository.js';
-import { RevenueDrilldownCacheRepository } from '../repositories/RevenueDrilldownCacheRepository.js';
 import type { RevenueSalespersonPayload } from '../reports/types.js';
 import type { RevenueDrilldownResponse, RevenueSalespersonRow, RevenueSourceFile } from './revenue-types.js';
+import { Decimal } from 'decimal.js';
 
 function decimalString(value: number): string {
   return new Decimal(value).toDecimalPlaces(4).toString();
@@ -63,20 +62,4 @@ export function buildDrilldownFromSalespersonSnapshot(row: ReportSnapshotRow): R
       revenueAmount: entry.revenueAmount,
     })),
   };
-}
-
-export async function refreshRevenueDrilldownCacheFromSnapshot(row: ReportSnapshotRow): Promise<void> {
-  const payloadJson = buildDrilldownFromSalespersonSnapshot(row);
-  const { fileDate, fileTimestamp } = fileTimingFromSnapshot(row);
-  await RevenueDrilldownCacheRepository.upsert({
-    providerFileId: row.providerFileId,
-    fileName: row.fileName,
-    mimeType: 'text/csv',
-    modifiedTime: row.snapshotTimestamp,
-    sizeBytes: null,
-    fileDate,
-    fileTimestamp,
-    checksum: row.checksum,
-    payloadJson,
-  });
 }

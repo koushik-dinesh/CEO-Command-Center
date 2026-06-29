@@ -1,20 +1,20 @@
 import { ReportSnapshotRepository } from '../repositories/ReportSnapshotRepository.js';
-import { RevenueDrilldownCacheRepository } from '../repositories/RevenueDrilldownCacheRepository.js';
 import { buildDrilldownFromSalespersonSnapshot } from './revenue-drilldown-builder.js';
 import type { RevenueDrilldownResponse } from './revenue-types.js';
 
 export class RevenueService {
   async drilldown(snapshotKey?: string): Promise<RevenueDrilldownResponse> {
     const resolvedKey = snapshotKey ?? await this.resolveLatestSnapshotKey();
-    if (resolvedKey) {
-      const fromSnapshot = await this.buildFromSnapshotKey(resolvedKey);
-      if (fromSnapshot) return fromSnapshot;
+    if (!resolvedKey) {
+      throw new Error('No revenue drilldown data available. Run sync to ingest snapshots from Google Drive.');
     }
 
-    const cached = await RevenueDrilldownCacheRepository.latest();
-    if (cached) return cached.payloadJson;
+    const fromSnapshot = await this.buildFromSnapshotKey(resolvedKey);
+    if (!fromSnapshot) {
+      throw new Error(`Revenue drilldown unavailable for snapshot ${resolvedKey}. Ensure the snapshot is complete.`);
+    }
 
-    throw new Error('No revenue drilldown data available. Run sync to ingest snapshots from Google Drive.');
+    return fromSnapshot;
   }
 
   private async resolveLatestSnapshotKey(): Promise<string | null> {

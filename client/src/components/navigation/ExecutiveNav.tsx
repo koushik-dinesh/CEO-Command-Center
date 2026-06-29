@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { PRIMARY_NAV, activeNavItem, navHref } from '../../config/navigation';
+import { resolveBackNavigation } from '../../config/backNavigation';
 import { useCommandCenterContext } from '../../context/CommandCenterContext';
 import { useAuth } from '../../hooks/useAuth';
 import ThemeToggle from '../ThemeToggle';
 import CompanyBranding from './CompanyBranding';
 import ExecutiveNavDrawer from './ExecutiveNavDrawer';
+import NavBackButton from './DrilldownBackLink';
 import { formatRelativeDateTime } from '../../utils/formatters';
 
 function NavPreviewCard({ lines }: { lines: Array<{ label: string; value: string }> }) {
@@ -27,6 +29,7 @@ export default function ExecutiveNav() {
   const { data, snapshotKey, refresh, isRefreshing, isLoading } = useCommandCenterContext();
   const [panelOpen, setPanelOpen] = useState(false);
   const active = activeNavItem(pathname);
+  const backNavigation = resolveBackNavigation(pathname);
 
   useEffect(() => {
     setPanelOpen(false);
@@ -62,13 +65,22 @@ export default function ExecutiveNav() {
       <header className="exec-header sticky top-0 z-50">
       <div className="exec-header-row">
         <div className="exec-header-left">
-          <Link to={navHref('/', snapshotKey)} className="exec-brand">
-            <span className="exec-brand-mark">CC</span>
-            <span className="exec-brand-text">
-              <span className="exec-brand-eyebrow">Command Center</span>
-              <span className="exec-brand-title">CEO Intelligence</span>
-            </span>
-          </Link>
+          <div className="exec-brand-cluster">
+            {backNavigation ? (
+              <NavBackButton
+                to={backNavigation.to}
+                label={backNavigation.label}
+                snapshotKey={snapshotKey}
+              />
+            ) : null}
+            <Link to={navHref('/', snapshotKey)} className="exec-brand">
+              <span className="exec-brand-mark">CC</span>
+              <span className="exec-brand-text">
+                <span className="exec-brand-eyebrow">Command Center</span>
+                <span className="exec-brand-title">CEO Intelligence</span>
+              </span>
+            </Link>
+          </div>
         </div>
 
         {PRIMARY_NAV.length > 0 ? (

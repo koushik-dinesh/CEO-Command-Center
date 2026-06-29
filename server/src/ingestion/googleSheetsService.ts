@@ -1,6 +1,5 @@
 import type { DataSourceRow as DataSource } from '../db/types.js';
 import { google, type sheets_v4 } from 'googleapis';
-import { recordGoogleDriveFetch, recordGoogleSheetsFetch } from './fetchActivityLog.js';
 import { createGoogleAuth } from './googleAuth.js';
 import type { SourceConfig, SourcePayload } from './types.js';
 import { logO34Stage } from '../copq/o34PipelineTrace.js';
@@ -64,6 +63,34 @@ function cellAt(rowData: sheets_v4.Schema$RowData[], startRow: number, startColu
   };
 }
 
+function cellSnapshotFromFetchedValue(
+  ref: string,
+  effectiveValue: unknown,
+  formattedValue: string | null,
+  formula: string | null = null,
+): CellSnapshot {
+  const hasValue = effectiveValue !== null && effectiveValue !== undefined && effectiveValue !== '';
+  return {
+    ref,
+    formattedValue,
+    effectiveValue: hasValue ? effectiveValue : null,
+    userEnteredValue: hasValue ? effectiveValue : null,
+    formula,
+    valueType: formula ? 'formula' : hasValue ? 'static' : 'empty',
+  };
+}
+
+function mergeCellSnapshot(primary: CellSnapshot, fallback: CellSnapshot): CellSnapshot {
+  if (primary.effectiveValue !== null && primary.effectiveValue !== undefined && primary.effectiveValue !== '') {
+    return {
+      ...primary,
+      formula: primary.formula ?? fallback.formula,
+      formattedValue: primary.formattedValue ?? fallback.formattedValue,
+    };
+  }
+  return fallback;
+}
+
 export class GoogleSheetsService {
   private sheets = google.sheets({ version: 'v4', auth: createGoogleAuth() });
   private drive = google.drive({ version: 'v3', auth: createGoogleAuth() });
@@ -76,7 +103,6 @@ export class GoogleSheetsService {
     const config = source.configJson as unknown as SourceConfig;
     const range = config.range ?? 'Sheet1!A:Z';
     const response = await this.sheets.spreadsheets.values.get({ spreadsheetId: source.locationRef, range });
-    recordGoogleSheetsFetch('spreadsheets.values.get', source.code);
     const values = response.data.values ?? [];
     return {
       providerFileId: `${source.locationRef}:${range}`,
@@ -87,13 +113,46 @@ export class GoogleSheetsService {
     };
   }
 
-  private spreadsheetGrid(spreadsheetId: string, range: string, sourceCode?: string) {
+  private spreadsheetGrid(spreadsheetId: string, range: string) {
     return this.sheets.spreadsheets.get({
       spreadsheetId,
       includeGridData: true,
       ranges: [range],
       fields: 'properties.title,sheets.properties.title,sheets.data.startRow,sheets.data.startColumn,sheets.data.rowData.values(formattedValue,userEnteredValue,effectiveValue)',
     });
+  }
+
+  private async fetchDashboardCellSnapshots(
+    spreadsheetId: string,
+    sheetName: string,
+    cellRefs: Record<string, string>,
+    gridCells: Record<string, CellSnapshot>,
+  ): Promise<Record<string, CellSnapshot>> {
+    const entries = Object.entries(cellRefs);
+    const ranges = entries.map(([, ref]) => `'${sheetName}'!${ref}`);
+
+    const [unformatted, formatted] = await Promise.all([
+      this.sheets.spreadsheets.values.batchGet({
+        spreadsheetId,
+        ranges,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      }),
+      this.sheets.spreadsheets.values.batchGet({
+        spreadsheetId,
+        ranges,
+        valueRenderOption: 'FORMATTED_VALUE',
+      }),
+    ]);
+
+    const result: Record<string, CellSnapshot> = {};
+    entries.forEach(([key, ref], index) => {
+      const raw = unformatted.data.valueRanges?.[index]?.values?.[0]?.[0] ?? null;
+      const display = formatted.data.valueRanges?.[index]?.values?.[0]?.[0] ?? null;
+      const formattedValue = display === null || display === undefined ? null : String(display);
+      const fromValues = cellSnapshotFromFetchedValue(ref, raw, formattedValue, gridCells[key]?.formula ?? null);
+      result[key] = mergeCellSnapshot(gridCells[key] ?? fromValues, fromValues);
+    });
+    return result;
   }
 
   private async fetchCopqDashboard(source: DataSource): Promise<SourcePayload> {
@@ -130,7 +189,7 @@ export class GoogleSheetsService {
         fields: 'id,name,mimeType,size,modifiedTime,webViewLink',
         supportsAllDrives: true,
       }),
-      this.spreadsheetGrid(source.locationRef, dashboardRange, source.code),
+      this.spreadsheetGrid(source.locationRef, dashboardRange),
       this.sheets.spreadsheets.values.get({
         spreadsheetId: source.locationRef,
         range: ncRecordsRange,
@@ -138,9 +197,6 @@ export class GoogleSheetsService {
         dateTimeRenderOption: 'FORMATTED_STRING',
       }),
     ]);
-    recordGoogleDriveFetch('files.get', source.code);
-    recordGoogleSheetsFetch('spreadsheets.get', source.code);
-    recordGoogleSheetsFetch('spreadsheets.values.get', source.code);
 
     const sheet = dashboardGrid.data.sheets?.find((candidate) => candidate.properties?.title === sheetName);
     if (!sheet) throw new Error(`Dashboard sheet not found: ${sheetName}`);
@@ -148,7 +204,7 @@ export class GoogleSheetsService {
     const rowData = data?.rowData ?? [];
     const dataStartRow = data?.startRow ?? startRow;
     const dataStartColumn = data?.startColumn ?? startColumn;
-    const cells = {
+    const gridCells = {
       totalCopqLabel: cellAt(rowData, dataStartRow, dataStartColumn, totalCopqLabelCell),
       totalCopq: cellAt(rowData, dataStartRow, dataStartColumn, totalCopqCell),
       qaSavedAmountLabel: cellAt(rowData, dataStartRow, dataStartColumn, qaSavedAmountLabelCell),
@@ -156,6 +212,14 @@ export class GoogleSheetsService {
       copqBeforeQaClearanceLabel: cellAt(rowData, dataStartRow, dataStartColumn, copqLabelCell),
       copqBeforeQaClearance: cellAt(rowData, dataStartRow, dataStartColumn, copqCell),
     };
+    const cells = await this.fetchDashboardCellSnapshots(source.locationRef, sheetName, {
+      totalCopqLabel: totalCopqLabelCell,
+      totalCopq: totalCopqCell,
+      qaSavedAmountLabel: qaSavedAmountLabelCell,
+      qaSavedAmount: qaSavedAmountCell,
+      copqBeforeQaClearanceLabel: copqLabelCell,
+      copqBeforeQaClearance: copqCell,
+    }, gridCells);
 
     logO34Stage('FETCH O34', cells.totalCopq, cells as unknown as Record<string, unknown>);
 
