@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { google } from 'googleapis';
+import { recordGoogleDriveFetch } from '../ingestion/fetchActivityLog.js';
 import { createGoogleAuth } from '../ingestion/googleAuth.js';
 import { DataSourceService } from '../services/DataSourceService.js';
 import { ReportSnapshotRepository } from '../repositories/ReportSnapshotRepository.js';
@@ -27,6 +28,7 @@ export class SnapshotEngine {
             }),
             SnapshotFileRegistryRepository.listAll(),
         ]);
+        recordGoogleDriveFetch('files.list', 'REVENUE_CSV');
         const result = {
             scanned: 0,
             processed: 0,
@@ -59,6 +61,7 @@ export class SnapshotEngine {
         const processOutcomes = await mapWithConcurrency(candidates, PROCESS_CONCURRENCY, async (driveFile) => {
             try {
                 const contentResponse = await this.drive.files.get({ fileId: driveFile.id, alt: 'media' }, { responseType: 'text' });
+                recordGoogleDriveFetch('files.get', driveFile.meta.reportType);
                 const content = String(contentResponse.data);
                 if (!content.trim()) {
                     return { kind: 'skipped' };

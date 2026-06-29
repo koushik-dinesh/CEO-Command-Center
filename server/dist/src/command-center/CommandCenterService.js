@@ -8,6 +8,7 @@ import { buildInventoryDaysIntelligence, buildInventoryDaysKpi, buildInventoryDa
 import { normalizeSnapshotDate, resolveSnapshotDateFromBatch } from '../snapshots/snapshotDate.js';
 import { PbtService } from '../pbt/PbtService.js';
 import { ProductivityService, buildProductivitySummaryBullets } from '../productivity/ProductivityService.js';
+import { getFetchActivitySnapshot } from '../ingestion/fetchActivityLog.js';
 import { extractCoreMetrics, generateInsights, generateDrilldownSummaries, buildKpi, buildComparisonMetric, extractRevenuePeriods, buildRevenueSubMetrics } from './insights.js';
 import { buildSnapshotAvailability } from '../snapshots/snapshotAvailability.js';
 function payloadMap(batch) {
@@ -395,6 +396,7 @@ export class CommandCenterService {
                 warehouses: [...new Set((current.inventory?.rows ?? []).map((row) => row.name))],
             },
             syncedAt: new Date().toISOString(),
+            fetchActivity: getFetchActivitySnapshot(),
         };
         const apiCopqKpi = response.kpis.find((kpi) => kpi.key === 'copq') ?? null;
         logO34Stage('API O34', {

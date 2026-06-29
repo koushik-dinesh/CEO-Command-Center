@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { recordGoogleDriveFetch, recordGoogleSheetsFetch } from './fetchActivityLog.js';
 import { createGoogleAuth } from './googleAuth.js';
 import { logO34Stage } from '../copq/o34PipelineTrace.js';
 function serializeExtendedValue(value) {
@@ -58,6 +59,7 @@ export class GoogleSheetsService {
         const config = source.configJson;
         const range = config.range ?? 'Sheet1!A:Z';
         const response = await this.sheets.spreadsheets.values.get({ spreadsheetId: source.locationRef, range });
+        recordGoogleSheetsFetch('spreadsheets.values.get', source.code);
         const values = response.data.values ?? [];
         return {
             providerFileId: `${source.locationRef}:${range}`,
@@ -67,7 +69,7 @@ export class GoogleSheetsService {
             content: JSON.stringify(values),
         };
     }
-    spreadsheetGrid(spreadsheetId, range) {
+    spreadsheetGrid(spreadsheetId, range, sourceCode) {
         return this.sheets.spreadsheets.get({
             spreadsheetId,
             includeGridData: true,
@@ -107,7 +109,7 @@ export class GoogleSheetsService {
                 fields: 'id,name,mimeType,size,modifiedTime,webViewLink',
                 supportsAllDrives: true,
             }),
-            this.spreadsheetGrid(source.locationRef, dashboardRange),
+            this.spreadsheetGrid(source.locationRef, dashboardRange, source.code),
             this.sheets.spreadsheets.values.get({
                 spreadsheetId: source.locationRef,
                 range: ncRecordsRange,
@@ -115,6 +117,9 @@ export class GoogleSheetsService {
                 dateTimeRenderOption: 'FORMATTED_STRING',
             }),
         ]);
+        recordGoogleDriveFetch('files.get', source.code);
+        recordGoogleSheetsFetch('spreadsheets.get', source.code);
+        recordGoogleSheetsFetch('spreadsheets.values.get', source.code);
         const sheet = dashboardGrid.data.sheets?.find((candidate) => candidate.properties?.title === sheetName);
         if (!sheet)
             throw new Error(`Dashboard sheet not found: ${sheetName}`);
